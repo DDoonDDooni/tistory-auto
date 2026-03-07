@@ -698,52 +698,84 @@ def select_category(driver, category):
         else:
             print(f"  카테고리 버튼 클릭: {result}")
 
-        time.sleep(0.8)
+        time.sleep(1.5)
         driver.save_screenshot("debug_category_open.png")
 
-        # 드롭다운 열린 후 항목 클릭 (광범위한 셀렉터)
+        # 드롭다운 열린 후 항목 클릭 (li → button → 전체 탐색)
         clicked = driver.execute_script(f"""
-            var selectors = [
-                'ul.category-list li',
-                '[class*="category"] li',
-                '[class*="Category"] li',
-                '[class*="category-item"]',
-                '[class*="CategoryItem"]',
-                '[class*="category_item"]',
-                '[role="option"]',
-                '[class*="list-item"]',
-                '[class*="listItem"]',
-                '[class*="panel"] li',
-                '[class*="popup"] li',
-                '[class*="popover"] li',
-                '[class*="dropdown"] li',
-                'option'
+            var target = '{category}';
+
+            // 1) li 기반 셀렉터
+            var liSelectors = [
+                'ul.category-list li', '[class*="category"] li',
+                '[class*="Category"] li', '[class*="panel"] li',
+                '[class*="popup"] li', '[class*="dropdown"] li'
             ];
-            for (var s = 0; s < selectors.length; s++) {{
-                var items = document.querySelectorAll(selectors[s]);
+            for (var s = 0; s < liSelectors.length; s++) {{
+                var items = document.querySelectorAll(liSelectors[s]);
                 for (var i = 0; i < items.length; i++) {{
                     var txt = items[i].textContent.trim();
-                    if (txt.includes('{category}')) {{
+                    if (txt.includes(target)) {{
                         items[i].click();
-                        return selectors[s] + ':' + txt;
+                        return liSelectors[s] + ':' + txt;
                     }}
                 }}
             }}
-            // 전체 li 탐색 (최후 수단)
+
+            // 2) role/class 기반
+            var roleSelectors = [
+                '[role="option"]', '[class*="category-item"]',
+                '[class*="CategoryItem"]', '[class*="category_item"]',
+                '[class*="list-item"]', '[class*="listItem"]', 'option'
+            ];
+            for (var s = 0; s < roleSelectors.length; s++) {{
+                var items = document.querySelectorAll(roleSelectors[s]);
+                for (var i = 0; i < items.length; i++) {{
+                    var txt = items[i].textContent.trim();
+                    if (txt.includes(target)) {{
+                        items[i].click();
+                        return roleSelectors[s] + ':' + txt;
+                    }}
+                }}
+            }}
+
+            // 3) 전체 li 탐색
             var allLi = document.querySelectorAll('li');
             for (var j = 0; j < allLi.length; j++) {{
                 var t = allLi[j].textContent.trim();
-                if (t === '{category}' || t.includes('{category}')) {{
+                if (t === target || t.includes(target)) {{
                     allLi[j].click();
                     return 'li:' + t;
                 }}
             }}
-            // 디버그: 현재 li 목록 반환
+
+            // 4) button 텍스트 탐색 (카테고리 항목이 button인 경우)
+            var allBtns = document.querySelectorAll('button');
+            for (var k = 0; k < allBtns.length; k++) {{
+                var bt = allBtns[k].textContent.trim();
+                if (bt.includes(target)) {{
+                    allBtns[k].click();
+                    return 'button:' + bt;
+                }}
+            }}
+
+            // 5) 전체 클릭 가능 요소 텍스트 탐색
+            var clickable = document.querySelectorAll('a, div, span');
+            for (var m = 0; m < clickable.length; m++) {{
+                var ct = clickable[m].textContent.trim();
+                if (ct === target || (ct.includes(target) && ct.length < 30)) {{
+                    clickable[m].click();
+                    return clickable[m].tagName + ':' + ct;
+                }}
+            }}
+
+            // 디버그: 현재 button/li 목록 반환
             var debug = [];
-            document.querySelectorAll('li').forEach(function(el) {{
-                debug.push(el.className.substring(0,30) + '|' + el.textContent.trim().substring(0,20));
+            document.querySelectorAll('button, li').forEach(function(el) {{
+                var t = el.textContent.trim();
+                if (t) debug.push(el.tagName + '|' + t.substring(0, 25));
             }});
-            return 'NOT_FOUND|' + JSON.stringify(debug.slice(0, 10));
+            return 'NOT_FOUND|' + JSON.stringify(debug.slice(0, 15));
         """)
 
         if clicked and not clicked.startswith('NOT_FOUND'):
