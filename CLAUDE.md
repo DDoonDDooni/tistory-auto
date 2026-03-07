@@ -94,6 +94,10 @@ Chrome 실행 (Selenium + webdriver-manager)
 | 인용구 | 파란 왼쪽 선 + 하늘색 배경 |
 | 추천 해시태그: | 주황 칩 박스 |
 
+## 글쓰기 페이지 이동
+- **확인된 URL**: `https://{BLOG_NAME}.tistory.com/manage/newpost`
+- `manage/post/write` 는 잘못된 URL (권한 오류 발생)
+
 ## Selenium CSS 셀렉터 목록
 | 대상 | 셀렉터 |
 |------|--------|

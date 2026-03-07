@@ -26,6 +26,8 @@ import json
 import time
 import re
 import socket
+import pyperclip
+import pyautogui
 import frontmatter
 import markdown2
 from selenium import webdriver
@@ -366,44 +368,189 @@ def get_driver():
 
 # ── 카카오 로그인 ───────────────────────────────────
 def kakao_login(driver):
-    print("[1] 로그인 상태 확인 중 (관리 페이지 접근 테스트)...")
+    print("[1] 로그인 상태 확인 중...")
+    # 블로그 전용 /manage 접근 (로그인 필요 → 오탐 없는 정확한 체크)
     driver.get(f"https://{BLOG_NAME}.tistory.com/manage")
-    time.sleep(2)
+    time.sleep(5)  # 리다이렉트 완료까지 대기
+    current = driver.current_url
+    print(f"  현재 URL: {current}")
 
-    # 관리 페이지에 실제 접근 가능하면 세션 유효
-    if f"{BLOG_NAME}.tistory.com/manage" in driver.current_url:
-        print("[OK] 기존 세션으로 로그인됨!")
+    # 세션 유효 체크: 블로그 /manage에 실제로 도달했는지 확인
+    if f"{BLOG_NAME}.tistory.com/manage" in current:
+        print("[OK] 기존 세션 유효 → 자동 진행")
         return
 
-    print("[!] 세션 없음 또는 만료 → 카카오 로그인 필요")
-    driver.get("https://www.tistory.com/auth/login")
-    time.sleep(2)
+    print("[*] 세션 없음 → 카카오 자동 로그인 시도...")
 
+    # 이미 로그인 페이지로 리다이렉트된 경우 → 그대로 사용
+    # 다른 페이지로 갔으면 → 로그인 페이지로 이동
+    if "auth/login" not in current:
+        driver.get("https://www.tistory.com/auth/login")
+        time.sleep(2)
+
+    # [1단계] 카카오 로그인 버튼 클릭
+    # querySelector 방식으로 직접 처리 (WebElement 인자 전달 X → Chrome crash 방지)
+    print("  [1단계] 카카오 로그인 버튼 클릭...")
+    WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.TAG_NAME, "body"))
+    )
+    time.sleep(1)
+
+    clicked = driver.execute_script("""
+        var selectors = [
+            'a.btn_login.link_kakao_id',
+            'a[data-kakao-id]',
+            'a[href*="kakao"]',
+            'button[class*="kakao"]'
+        ];
+        for (var i = 0; i < selectors.length; i++) {
+            var el = document.querySelector(selectors[i]);
+            if (el) { el.click(); return selectors[i]; }
+        }
+        var all = document.querySelectorAll('a, button');
+        for (var j = 0; j < all.length; j++) {
+            if (all[j].textContent.trim().includes('\uce74\uce74\uc624')) {
+                all[j].click();
+                return 'text:' + all[j].textContent.trim().substring(0, 20);
+            }
+        }
+        return null;
+    """)
+
+    if not clicked:
+        raise Exception("카카오 로그인 버튼을 찾을 수 없음 (셀렉터 확인 필요)")
+    print(f"  카카오 버튼 클릭됨: {clicked}")
+    time.sleep(3)
+
+    current = driver.current_url
+    print(f"  클릭 후 URL: {current}")
+    driver.save_screenshot("debug_kakao_page.png")
+
+    # 이미 로그인 완료 (Kakao 세션으로 자동 처리)
+    if "tistory.com" in current and "auth/login" not in current and "kakao" not in current:
+        print("[OK] 카카오 세션으로 자동 로그인 완료")
+        return
+
+    # ──────────────────────────────────────────────────────────
+    # ⚠️  Kakao 도메인에서 execute_script / find_elements 금지
+    #     Kakao 안티봇이 DOM 쿼리 감지 시 Chrome 강제 종료시킴
+    #     URL 분석 + pyautogui 로만 상호작용
+    # ──────────────────────────────────────────────────────────
+
+    # ── Kakao 페이지 단계별 처리 ────────────────────────────
+    # get_window_rect/current_url 은 안전, execute_script/find_elements 금지
+    kakao_page_type = current  # 현재 URL 상태 저장
+
+    # [2단계] 계정 선택 페이지 (simple login / select_account)
+    if "simple" in current or "select_account" in current:
+        print("  [2단계] 카카오 계정 선택 페이지 → 프로필 클릭...")
+        time.sleep(2)
+
+        rect = driver.get_window_rect()
+        # pyautogui 스크린샷으로 실제 뷰포트 위치 역산 (동적 위치 대응)
+        chrome_bar_h = _find_chrome_bar_height(driver, rect)
+        print(f"  Chrome UI 높이: {chrome_bar_h}px, 창 위치: ({rect['x']}, {rect['y']})")
+
+        # 프로필 사진 위치 (viewport 기준): x≈435, y≈307 (1280px 창 레이아웃)
+        # 계정 행 텍스트 (fallback): x≈617, y≈307
+        # 먼저 Chrome 창에 포커스 → 이후 계정 클릭
+        safe_focus_x = rect['x'] + 640
+        safe_focus_y = rect['y'] + chrome_bar_h + 50  # 카드 위 빈 영역
+        pyautogui.click(safe_focus_x, safe_focus_y)
+        time.sleep(0.5)
+
+        for vp_x, vp_y, desc in [
+            (435, 307, "프로필 사진"),
+            (617, 307, "계정 이메일"),
+            (500, 307, "계정 행 중앙"),
+        ]:
+            click_x = rect['x'] + vp_x
+            click_y = rect['y'] + chrome_bar_h + vp_y
+            print(f"  {desc} 클릭: ({click_x}, {click_y})")
+            pyautogui.moveTo(click_x, click_y, duration=0.3)
+            time.sleep(0.2)
+            pyautogui.click()
+            time.sleep(0.5)
+            pyautogui.press("enter")
+            time.sleep(4)
+            current = driver.current_url
+            if "tistory.com" in current and "auth/login" not in current and "kakao" not in current:
+                print(f"[OK] {desc} 클릭 → 로그인 완료")
+                return
+            if "simple" not in current and "select_account" not in current:
+                break  # 다른 Kakao 페이지로 전환됨
+
+        # 계정 선택 후 비밀번호 확인 페이지가 뜬 경우
+        current = driver.current_url
+        if "tistory.com" not in current and ("check" in current or "password" in current):
+            print(f"  비밀번호 확인 페이지 → 비밀번호 입력...")
+            time.sleep(1)
+            pyperclip.copy(KAKAO_PASSWORD)
+            pyautogui.hotkey("ctrl", "v")
+            time.sleep(0.3)
+            pyautogui.press("enter")
+            time.sleep(3)
+            current = driver.current_url
+            if "tistory.com" in current and "auth/login" not in current:
+                print("[OK] 비밀번호 확인 → 로그인 완료")
+                return
+
+        current = driver.current_url
+        print(f"  계정 선택 처리 후 URL: {current[:80]}")
+        print("  → 추가 인증 필요 시 아래 180초 대기 중 처리하세요")
+        # ID/PW 입력은 하지 않음 (계정 선택 페이지에서는 무의미)
+
+    # [3단계] 카카오 로그인 폼 처리 (신규 로그인 / ID·PW 입력)
+    # 계정 선택 화면이 아닌 경우에만 실행
+    elif "kakao" in current:
+        print("  [3단계] 카카오 로그인 폼 → ID/PW 입력 (pyautogui)...")
+        time.sleep(2)
+        pyperclip.copy(KAKAO_EMAIL)
+        pyautogui.hotkey("ctrl", "v")
+        time.sleep(0.5)
+        pyautogui.press("tab")   # 비밀번호 필드로 이동
+        time.sleep(0.3)
+        pyperclip.copy(KAKAO_PASSWORD)
+        pyautogui.hotkey("ctrl", "v")
+        time.sleep(0.3)
+        pyautogui.press("enter")
+        time.sleep(2)
+        print("[OK] ID/PW 입력 완료")
+
+    # 2FA 또는 로그인 완료 대기
     print("\n" + "=" * 54)
-    print("  브라우저에서 카카오 로그인을 직접 진행해주세요.")
-    print("  >> '이 브라우저에서 2단계 인증 사용 안 함' 체크 권장")
-    print("  로그인 완료 후 자동으로 포스팅이 진행됩니다.")
-    print("  (최대 120초 대기)")
+    print("  2FA 인증번호(문자)가 왔으면 입력해주세요.")
+    print("  >> '이 브라우저에서 2단계 인증 사용 안 함' 반드시 체크")
+    print("  >> 한 번 체크하면 이후 실행부터 완전 자동화됩니다.")
+    print("  (최대 180초 대기)")
     print("=" * 54 + "\n")
 
     try:
-        WebDriverWait(driver, 120).until(
-            lambda d: f"{BLOG_NAME}.tistory.com" in d.current_url
-                      and "auth/login" not in d.current_url
+        WebDriverWait(driver, 180).until(
+            lambda d: "auth/login" not in d.current_url
                       and "kakao" not in d.current_url
+                      and "tistory.com" in d.current_url
         )
     except Exception:
-        raise Exception("로그인 대기 시간 초과 (120초). 다시 실행해주세요.")
+        raise Exception("로그인 대기 시간 초과 (180초). 다시 실행해주세요.")
 
-    print("[OK] 로그인 성공!")
+    print("[OK] 로그인 성공! (다음 실행부터 완전 자동)")
 
 
 # ── 글쓰기 이동 ─────────────────────────────────────
 def go_to_write(driver):
-    url = f"https://{BLOG_NAME}.tistory.com/manage/post/write"
+    url = f"https://{BLOG_NAME}.tistory.com/manage/newpost"
     print(f"\n[5] 글쓰기 이동: {url}")
     driver.get(url)
-    time.sleep(3)
+    # 이전 임시저장 글 이어쓰기 알림 처리 → WebDriverWait으로 대기 후 닫기
+    try:
+        WebDriverWait(driver, 6).until(EC.alert_is_present())
+        alert = driver.switch_to.alert
+        print(f"  [알림] {alert.text[:30]}... → 닫기")
+        alert.dismiss()
+        time.sleep(1)
+    except Exception:
+        time.sleep(3)  # 알림 없으면 일반 대기
     # 새 탭/창이 열렸으면 최신 창으로 전환
     handles = driver.window_handles
     if len(handles) > 1:
@@ -415,17 +562,24 @@ def go_to_write(driver):
 # ── 제목 입력 ───────────────────────────────────────
 def input_title(driver, title):
     print(f"[6] 제목 입력: {title}")
+    print(f"  현재 URL: {driver.current_url}")
+    driver.save_screenshot("debug_before_title.png")
+
     wait = WebDriverWait(driver, 15)
-    inp = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input#post-title-inp")))
-    driver.execute_script(
-        "arguments[0].focus();"
-        "var nv = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;"
-        "nv.call(arguments[0], arguments[1]);"
-        "arguments[0].dispatchEvent(new Event('input', {bubbles:true}));"
-        "arguments[0].dispatchEvent(new Event('change', {bubbles:true}));",
-        inp, title
+    wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input#post-title-inp")))
+
+    # null 체크 포함 (querySelector 실패 시 명확한 오류 메시지)
+    found = driver.execute_script(
+        "return document.querySelector('input#post-title-inp') !== null;"
     )
-    time.sleep(1)
+    if not found:
+        raise Exception("input#post-title-inp 셀렉터를 찾을 수 없음 (debug_before_title.png 확인)")
+
+    driver.execute_script("document.querySelector('input#post-title-inp').focus();")
+    time.sleep(0.3)
+    pyperclip.copy(title)
+    pyautogui.hotkey("ctrl", "v")
+    time.sleep(0.5)
 
 
 # ── 본문 HTML 주입 ──────────────────────────────────
@@ -433,28 +587,29 @@ def input_content_html(driver, html_content):
     print("[7] HTML 모드 전환 중...")
     wait = WebDriverWait(driver, 15)
     try:
-        wait.until(EC.element_to_be_clickable(
-            (By.CSS_SELECTOR, "button.editor-mode-html")
-        )).click()
+        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "button.editor-mode-html")))
+        driver.execute_script("document.querySelector('button.editor-mode-html').click();")
         time.sleep(1)
     except Exception:
         print("  (HTML 모드 버튼 스킵)")
 
     print("[8] 본문 HTML 주입 중...")
+    # HTML 내용을 sessionStorage에 먼저 저장 후 주입 (WebElement 인자 전달 없이)
+    driver.execute_script("window.__postHtml = arguments[0];", html_content)
     injected = driver.execute_script("""
         var cm = document.querySelector('.CodeMirror');
         if (cm && cm.CodeMirror) {
-            cm.CodeMirror.setValue(arguments[0]);
+            cm.CodeMirror.setValue(window.__postHtml);
             return true;
         }
         return false;
-    """, html_content)
+    """)
 
     if not injected:
         driver.execute_script("""
             var el = document.querySelector('[contenteditable="true"]');
-            if (el) el.innerHTML = arguments[0];
-        """, html_content)
+            if (el) el.innerHTML = window.__postHtml;
+        """)
 
     time.sleep(1)
     print("[OK] 본문 주입 완료")
@@ -469,17 +624,20 @@ def input_tags(driver, tags):
         wait = WebDriverWait(driver, 10)
         inp = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input#tagText")))
         for tag in [t.strip() for t in tags.split(",") if t.strip()]:
+            # querySelector 방식으로 직접 처리 (WebElement 인자 전달 → Chrome crash 우회)
             driver.execute_script(
+                "var el = document.querySelector('input#tagText');"
+                "el.focus();"
                 "var nv = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;"
-                "nv.call(arguments[0], arguments[1]);"
-                "arguments[0].dispatchEvent(new Event('input', {bubbles:true}));",
-                inp, tag
+                "nv.call(el, arguments[0]);"
+                "el.dispatchEvent(new Event('input', {bubbles:true}));",
+                tag
             )
             time.sleep(0.2)
             driver.execute_script(
-                "arguments[0].dispatchEvent(new KeyboardEvent('keydown', {key:'Enter',keyCode:13,bubbles:true}));"
-                "arguments[0].dispatchEvent(new KeyboardEvent('keyup', {key:'Enter',keyCode:13,bubbles:true}));",
-                inp
+                "var el = document.querySelector('input#tagText');"
+                "el.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter',keyCode:13,bubbles:true}));"
+                "el.dispatchEvent(new KeyboardEvent('keyup', {key:'Enter',keyCode:13,bubbles:true}));"
             )
             time.sleep(0.4)
         print(f"[OK] 태그 완료")
@@ -494,12 +652,15 @@ def select_category(driver, category):
     print(f"[10] 카테고리: {category}")
     try:
         wait = WebDriverWait(driver, 10)
-        wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button.btn-category"))).click()
+        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "button.btn-category")))
+        driver.execute_script("document.querySelector('button.btn-category').click();")
         time.sleep(1)
-        for item in driver.find_elements(By.CSS_SELECTOR, "ul.category-list li"):
+        items = driver.find_elements(By.CSS_SELECTOR, "ul.category-list li")
+        for item in items:
             if category in item.text:
-                item.click()
-                print(f"[OK] 카테고리 선택: {item.text}")
+                txt = item.text
+                driver.execute_script("arguments[0].click();", item)
+                print(f"[OK] 카테고리 선택: {txt}")
                 break
         time.sleep(1)
     except Exception as e:
@@ -512,7 +673,8 @@ def save_post(driver, visibility):
     if visibility == "0":
         print("\n[11] 임시저장 중...")
         try:
-            wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button.btn-save"))).click()
+            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "button.btn-save")))
+            driver.execute_script("document.querySelector('button.btn-save').click();")
             time.sleep(2)
             print("[OK] 임시저장 완료!")
         except Exception as e:
@@ -520,7 +682,8 @@ def save_post(driver, visibility):
     else:
         print("\n[11] 발행 중...")
         try:
-            wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button.btn-publish"))).click()
+            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "button.btn-publish")))
+            driver.execute_script("document.querySelector('button.btn-publish').click();")
             time.sleep(2)
             print("[OK] 발행 완료!")
         except Exception as e:
