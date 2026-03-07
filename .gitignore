@@ -1,16 +1,20 @@
-# 카카오 계정 정보 포함, 절대 커밋 금지
+# 민감 정보
 config.json
 
-# Chrome 세션 폴더, 용량 큼
+# Chrome 프로필 (로그인 세션 포함)
 chrome_profile/
 
-# 에러/디버그 스크린샷
-error_screenshot.png
+# 디버그 스크린샷
 debug_*.png
+error_screenshot.png
 
 # Python
 __pycache__/
 *.pyc
+*.pyo
+.venv/
+venv/
 
-# 환경 변수
-.env
+# OS
+.DS_Store
+Thumbs.db
