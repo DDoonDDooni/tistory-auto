@@ -26,6 +26,7 @@ import json
 import time
 import re
 import socket
+import html as _html
 import pyperclip
 import pyautogui
 import frontmatter
@@ -97,7 +98,7 @@ STYLE = """<style>
   line-height: 1.75;
 }
 .dbai-post .summary-box::before {
-  content: "📌  TL;DR";
+  content: "📌  요약";
   display: block;
   font-weight: 700;
   font-size: 11px;
@@ -248,6 +249,93 @@ STYLE = """<style>
 </style>"""
 
 
+# ── SQL 문법 하이라이팅 ─────────────────────────────
+def _highlight_sql_content(text):
+    """SQL 코드블록 내부에 기본 문법 하이라이팅 적용 (겹침 방지 방식)"""
+    spans = []  # (start, end, replacement_html)
+
+    # 1) 줄 주석 -- ... (최우선)
+    for m in re.finditer(r'--[^\n]*', text):
+        repl = f'<span style="color:#8b949e;font-style:italic">{m.group()}</span>'
+        spans.append((m.start(), m.end(), repl))
+
+    # 2) 문자열 리터럴 '...'
+    for m in re.finditer(r"'[^'\n]*'", text):
+        repl = f'<span style="color:#a5d6ff">{m.group()}</span>'
+        spans.append((m.start(), m.end(), repl))
+
+    # 3) SQL 함수명 (키워드보다 먼저 처리)
+    func_pat = (
+        r'(?<![a-zA-Z_$])(COUNT|SUM|AVG|MAX|MIN|COALESCE|NVL|NVL2|DECODE|'
+        r'TO_DATE|TO_CHAR|TO_NUMBER|SYSDATE|TRUNC|ROUND|'
+        r'RANK|DENSE_RANK|ROW_NUMBER|LEAD|LAG)(?=\s*\()'
+    )
+    for m in re.finditer(func_pat, text, re.IGNORECASE):
+        repl = f'<span style="color:#ffa657;font-weight:bold">{m.group(1).upper()}</span>'
+        spans.append((m.start(1), m.end(1), repl))
+
+    # 4) SQL 키워드 (다중 단어 먼저)
+    kw_pat = (
+        r'(?<![a-zA-Z_$#])'
+        r'(GROUP\s+BY|ORDER\s+BY|PARTITION\s+BY|'
+        r'LEFT\s+(?:OUTER\s+)?JOIN|RIGHT\s+(?:OUTER\s+)?JOIN|INNER\s+JOIN|FULL\s+(?:OUTER\s+)?JOIN|CROSS\s+JOIN|'
+        r'ALTER\s+SYSTEM|ALTER\s+SESSION|'
+        r'INSERT\s+INTO|UNION\s+ALL|'
+        r'SELECT|FROM|WHERE|HAVING|DISTINCT|WITH|JOIN|'
+        r'UNION|INTERSECT|MINUS|INTO|VALUES|UPDATE|'
+        r'CREATE|ALTER|DROP|DELETE|'
+        r'AND|OR|NOT|IS\s+NOT\s+NULL|IS\s+NULL|IN|IS|AS|ON|USING|'
+        r'CASE|WHEN|THEN|ELSE|END|ALL|ANY|EXISTS|BETWEEN|LIKE|'
+        r'DESC|ASC|OVER|ROWNUM|DUAL|'
+        r'SHOW|SET|SCOPE|BOTH|PARAMETER|'
+        r'NULL)'
+        r'(?![a-zA-Z_$#])'
+    )
+    for m in re.finditer(kw_pat, text, re.IGNORECASE):
+        kw = re.sub(r'\s+', ' ', m.group(1).upper())
+        repl = f'<span style="color:#79c0ff;font-weight:bold">{kw}</span>'
+        spans.append((m.start(1), m.end(1), repl))
+
+    # 겹치는 span 제거 (앞에서 추가된 순서가 높은 우선순위)
+    spans.sort(key=lambda x: x[0])
+    non_overlapping = []
+    last_end = 0
+    for s, e, r in spans:
+        if s >= last_end:
+            non_overlapping.append((s, e, r))
+            last_end = e
+
+    # 역방향으로 텍스트에 적용 (위치 밀림 방지)
+    result = text
+    for s, e, r in reversed(non_overlapping):
+        result = result[:s] + r + result[e:]
+    return result
+
+
+def _sql_block_to_div(code_raw):
+    """SQL 코드를 div 기반 하이라이팅 블록으로 변환.
+    <pre><code> 대신 <div>를 사용해 TinyMCE가 span을 텍스트로 이스케이프하는 문제 우회.
+    """
+    highlighted = _highlight_sql_content(code_raw.strip())
+    lines = highlighted.split('\n')
+    content = ''.join(
+        f'<span style="display:block;min-height:1.4em">{line if line.strip() else "&nbsp;"}</span>'
+        for line in lines
+    )
+    return (
+        '<div class="dbai-sql-block" style="'
+        'background:#0d1117;border:1px solid #30363d;border-radius:10px;'
+        'padding:20px 22px 20px 22px;margin:18px 0;overflow-x:auto;'
+        'font-family:JetBrains Mono,Fira Code,Consolas,monospace;'
+        'font-size:13.5px;line-height:1.7;color:#ffffff;position:relative">'
+        '<span style="position:absolute;top:9px;right:14px;font-size:10px;'
+        'color:#6e7681;text-transform:uppercase;letter-spacing:1px;'
+        'font-family:Consolas,monospace">SQL</span>'
+        f'{content}'
+        '</div>'
+    )
+
+
 # ── 마크다운 → 모던 스타일 HTML 변환 ──────────────
 def md_to_styled_html(md_text):
 
@@ -297,7 +385,21 @@ def md_to_styled_html(md_text):
     )
     html_body = html_body.replace('<pre><code>', '<pre data-lang="code"><code>')
 
-    # 5) 조립
+    # 5) SQL 코드블록 → 하이라이팅 div로 교체
+    # (TinyMCE는 <pre><code> 안 <span>을 이스케이프하므로 <div> 기반으로 우회)
+    def _sql_block_replace(m):
+        code_escaped = m.group(1)
+        code_raw = _html.unescape(code_escaped)  # &lt; 등 HTML 엔티티 복원
+        return _sql_block_to_div(code_raw)
+
+    html_body = re.sub(
+        r'<pre data-lang="sql"><code[^>]*>(.*?)</code></pre>',
+        _sql_block_replace,
+        html_body,
+        flags=re.DOTALL
+    )
+
+    # 6) 조립
     full_html = (
         f"{STYLE}\n"
         f'<div class="dbai-post">\n'
