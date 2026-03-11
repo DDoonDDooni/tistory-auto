@@ -56,6 +56,15 @@ Python + Selenium으로 티스토리에 자동 포스팅하는 스크립트
 - [x] 제목 글자 수 35자 → 45자 (`[카테고리]` prefix 포함 기준)
 - [x] 기술 전문 용어 영어 작성 규칙 정립 (tablespace, index, partition 등)
 
+### v6 - 본문 주입 + 인라인 스타일 전환
+- [x] TinyMCE iframe selector 확인: `.tox-edit-area__iframe` → **`#editor-tistory_ifr`** (실제 ID)
+- [x] 본문 주입 방식: `setContent()` → **`#editor-tistory_ifr` body.innerHTML 직접 주입**
+- [x] CSS `<style>` 블록 전면 제거 → **모든 스타일 인라인(`style=""`) 전환**
+  - TinyMCE가 `<style>` 블록의 class 기반 CSS를 저장 시 삭제하는 문제 근본 해결
+  - 요약 박스, h2/h3, 표, blockquote, 코드블록, 해시태그 칩 전부 인라인 스타일
+  - `_apply_inline_styles()` 함수로 markdown2 변환 후 일괄 적용
+  - 언어 라벨: `pre::before` pseudo-element → `<span style="position:absolute">` 직접 삽입
+
 ---
 
 ## 현재 코드 상태
@@ -67,7 +76,7 @@ Python + Selenium으로 티스토리에 자동 포스팅하는 스크립트
 | 세션 유지 | `chrome_profile/` 폴더 |
 | Chrome 재사용 | Remote Debugging Port 9222 감지 시 기존 Chrome 연결 |
 | 제목 입력 | pyautogui viewport (300, 185) — `wait.until` 금지 |
-| 본문 주입 | `tinymce.activeEditor.setContent()` |
+| 본문 주입 | `#editor-tistory_ifr` iframe body.innerHTML 직접 주입 |
 | 태그 입력 | `input#tagText` + JS KeyboardEvent |
 | 카테고리 | `[role="option"]` 셀렉터 (5단계 폴백) |
 | 임시저장 | pyautogui (x≈1047, 하단 -34px) |

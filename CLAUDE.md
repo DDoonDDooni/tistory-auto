@@ -92,22 +92,26 @@ Chrome 실행 (Selenium + webdriver-manager)
 임시저장(0) 또는 발행(3)
 ```
 
-## CSS 스타일 적용 현황
+## 스타일 구현 방식
+**모든 스타일은 인라인 스타일(`style=""`)로 적용** — TinyMCE가 `<style>` 블록의 class 기반 CSS를 저장 시 제거하기 때문.
+
 | 마크다운 요소 | 변환 결과 |
 |-------------|----------|
-| ## 소제목 | 주황 왼쪽 바 + 그라디언트 배경 |
-| ### 소제목 | 슬레이트 왼쪽 바 |
-| 요약: 내용 | 주황 요약 박스 (📌 라벨 자동 삽입) |
-| 코드블록 (일반) | 다크 테마 (#0d1117) + 언어 라벨 |
-| 코드블록 (SQL) | `<div>` 기반 하이라이팅 — 줄 번호 + 들여쓰기 보존 + 키워드 파란색(`#79c0ff`), 함수 주황색(`#ffa657`), 주석 회색(`#8b949e`), 기본(`#e6edf3`) |
-| 표 | 다크 헤더 + 홀짝 행 배경 + 호버 효과 |
-| 인용구 | 파란 왼쪽 선 + 하늘색 배경 |
-| 추천 해시태그: | 주황 칩 박스 |
+| ## 소제목 | 주황 왼쪽 바 + 그라디언트 배경 (인라인 스타일) |
+| ### 소제목 | 슬레이트 왼쪽 바 (인라인 스타일) |
+| 요약: 내용 | 주황 요약 박스 — `📌  요약` 라벨 포함 span 직접 생성 |
+| 코드블록 (일반) | 다크 테마 (#0d1117) + 언어 라벨 span 직접 삽입 |
+| 코드블록 (SQL) | `<div>` 기반 하이라이팅 — 줄 번호 + `white-space:pre` |
+| 표 | 다크 헤더(`#1f2937`) + 셀 border (인라인 스타일) |
+| 인용구 | 파란 왼쪽 선 + 하늘색 배경 (인라인 스타일) |
+| 추천 해시태그: | 주황 칩 박스 (인라인 스타일) |
 
+> **스타일 적용 함수**: `_apply_inline_styles(html)` — markdown2 변환 후 h2/h3/table/th/td/blockquote/pre/code 태그에 인라인 스타일 일괄 적용
+>
 > **SQL 코드블록 구현 방식**:
-> 1. `markdown2` 2.5.5가 fenced code block 언어 클래스를 제거하는 버그 → ` ```sql ` 블록을 markdown2 실행 **전에 선추출** (`dbai-sqlph-N` placeholder 교체), 변환 후 복원
-> 2. TinyMCE가 `<pre><code>` 내부의 `<span>`을 이스케이프하는 문제 → `<div>` + 라인별 `display:flex` + `white-space:pre` 구조로 우회
-> 3. 줄 번호 span + `white-space:pre`로 들여쓰기 보존
+> 1. `markdown2` 2.5.5 버그 → ` ```sql ` 블록을 markdown2 실행 **전에 선추출** (placeholder 방식)
+> 2. TinyMCE `<pre><code>` 내부 `<span>` 이스케이프 문제 → `<div>` + `display:flex` + `white-space:pre` 구조로 우회
+> 3. 언어 라벨: pseudo-element 대신 `<span style="position:absolute">` 직접 삽입
 
 ## 글쓰기 페이지 이동
 - **확인된 URL**: `https://{BLOG_NAME}.tistory.com/manage/newpost`
@@ -121,7 +125,7 @@ Chrome 실행 (Selenium + webdriver-manager)
 | 카카오 비밀번호 입력 | `input#password` | |
 | 카카오 로그인 제출 | `button.btn_g.highlight.submit` | |
 | 포스트 제목 입력 | pyautogui viewport (300, 185) | wait.until 금지 |
-| 본문 주입 | `tinymce.activeEditor.setContent()` | TinyMCE API (JS 실행) |
+| 본문 주입 | `#editor-tistory_ifr` iframe body.innerHTML 직접 주입 | |
 | 태그 입력 | `input#tagText` + JS KeyboardEvent | |
 | 카테고리 버튼 | 텍스트 매칭 `카테고리` | JS click |
 | 카테고리 항목 | `[role="option"]` + button 텍스트 폴백 | li 없음 |
@@ -181,7 +185,7 @@ python 02_post.py
 ### 코드 수정 원칙
 - 각 기능은 독립 함수로 분리 (로그인/제목/본문/태그/카테고리/저장)
 - 셀렉터 변경 시 해당 함수만 수정
-- 새 스타일은 STYLE 변수(파일 상단)에만 추가
+- 새 스타일은 파일 상단 `_IS_*` 인라인 스타일 상수에만 추가 (`STYLE` 블록 없음)
 - 에러 발생 시 항상 error_screenshot.png 저장 로직 유지
 
 ### 포스팅 원고 작성 규칙

@@ -52,201 +52,23 @@ DEF_VISIBILITY = config.get("default_visibility", "0")
 POST_FILE = "posts/post.md"
 REMOTE_DEBUG_PORT = 9222  # Chrome Remote Debugging Port
 
-# ── 모던 CSS 스타일 ─────────────────────────────────
-STYLE = """<style>
-.dbai-post {
-  font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif;
-  font-size: 16px;
-  line-height: 1.85;
-  color: #1f2328;
-  word-break: keep-all;
-  max-width: 800px;
-}
-
-/* 소제목 h2: 주황 왼쪽 바 */
-.dbai-post h2 {
-  font-size: 20px;
-  font-weight: 700;
-  color: #111827;
-  margin: 40px 0 14px;
-  padding: 8px 0 8px 16px;
-  border-left: 4px solid #f97316;
-  background: linear-gradient(90deg, rgba(249,115,22,0.07) 0%, transparent 80%);
-  border-radius: 0 6px 6px 0;
-}
-
-/* 소제목 h3: 슬레이트 왼쪽 바 */
-.dbai-post h3 {
-  font-size: 17px;
-  font-weight: 600;
-  color: #374151;
-  margin: 30px 0 10px;
-  padding: 4px 0 4px 12px;
-  border-left: 3px solid #94a3b8;
-}
-
-/* 요약 박스 */
-.dbai-post .summary-box {
-  background: linear-gradient(135deg, #fff7ed 0%, #fffbf7 100%);
-  border: 1px solid #fed7aa;
-  border-left: 5px solid #f97316;
-  border-radius: 0 10px 10px 0;
-  padding: 16px 20px 16px 20px;
-  margin: 16px 0 28px;
-  font-size: 15px;
-  color: #7c2d12;
-  line-height: 1.75;
-}
-.dbai-post .summary-box::before {
-  content: "📌  요약";
-  display: block;
-  font-weight: 700;
-  font-size: 11px;
-  letter-spacing: 1.2px;
-  color: #f97316;
-  margin-bottom: 8px;
-  text-transform: uppercase;
-}
-
-/* 코드블록 다크 테마 */
-.dbai-post pre {
-  background: #0d1117;
-  border: 1px solid #30363d;
-  border-radius: 10px;
-  padding: 20px 22px 20px 22px;
-  margin: 18px 0;
-  overflow-x: auto;
-  position: relative;
-}
-.dbai-post pre::before {
-  content: attr(data-lang);
-  position: absolute;
-  top: 9px;
-  right: 14px;
-  font-size: 10px;
-  font-family: 'JetBrains Mono', 'Consolas', monospace;
-  color: #6e7681;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-.dbai-post pre code {
-  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
-  font-size: 13.5px;
-  line-height: 1.7;
-  color: #e6edf3;
-  background: none !important;
-  padding: 0 !important;
-  border: none !important;
-  border-radius: 0 !important;
-}
-
-/* 인라인 코드 */
-.dbai-post code {
-  font-family: 'JetBrains Mono', 'Consolas', monospace;
-  font-size: 13px;
-  background: #f1f5f9;
-  color: #e11d48;
-  padding: 2px 6px;
-  border-radius: 4px;
-  border: 1px solid #e2e8f0;
-}
-
-/* 표 */
-.dbai-post table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 22px 0;
-  font-size: 14px;
-  border-radius: 10px;
-  overflow: hidden;
-  box-shadow: 0 1px 6px rgba(0,0,0,0.08);
-}
-.dbai-post thead tr {
-  background: #1f2937;
-  color: #f9fafb;
-}
-.dbai-post th {
-  padding: 12px 16px;
-  text-align: left;
-  font-weight: 600;
-  font-size: 13px;
-  letter-spacing: 0.3px;
-}
-.dbai-post td {
-  padding: 11px 16px;
-  border-bottom: 1px solid #e5e7eb;
-  color: #374151;
-}
-.dbai-post tbody tr:nth-child(even) td {
-  background: #f8fafc;
-}
-.dbai-post tbody tr:hover td {
-  background: #fff7ed;
-}
-
-/* 인용구 */
-.dbai-post blockquote {
-  margin: 20px 0;
-  padding: 14px 20px;
-  background: #f0f9ff;
-  border-left: 4px solid #0ea5e9;
-  border-radius: 0 8px 8px 0;
-  color: #0c4a6e;
-  font-size: 15px;
-  line-height: 1.75;
-}
-.dbai-post blockquote p { margin: 0; }
-
-/* 단락 */
-.dbai-post p {
-  margin: 0 0 14px;
-  color: #374151;
-}
-
-/* 강조 */
-.dbai-post strong { font-weight: 700; color: #111827; }
-
-/* 구분선 */
-.dbai-post hr {
-  border: none;
-  border-top: 2px dashed #e5e7eb;
-  margin: 32px 0;
-}
-
-/* 리스트 */
-.dbai-post ul, .dbai-post ol {
-  padding-left: 24px;
-  margin: 10px 0 18px;
-}
-.dbai-post li {
-  margin-bottom: 6px;
-  color: #374151;
-  line-height: 1.75;
-}
-
-/* 해시태그 박스 */
-.dbai-post .hashtag-area {
-  margin-top: 40px;
-  padding: 16px 18px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  font-size: 13px;
-  color: #64748b;
-  line-height: 2.2;
-}
-.dbai-post .ht-chip {
-  display: inline-block;
-  background: #fff7ed;
-  border: 1px solid #fed7aa;
-  color: #f97316;
-  padding: 3px 10px;
-  border-radius: 20px;
-  margin: 3px 2px;
-  font-size: 12px;
-  font-weight: 500;
-}
-</style>"""
+# ── 인라인 스타일 상수 (TinyMCE class 기반 CSS 제거 문제 우회) ──
+_IS_POST    = "font-family:'Noto Sans KR','Apple SD Gothic Neo',sans-serif;font-size:16px;line-height:1.85;color:#1f2328;word-break:keep-all;"
+_IS_H2      = "font-size:20px;font-weight:700;color:#111827;margin:40px 0 14px;padding:8px 0 8px 16px;border-left:4px solid #f97316;background:linear-gradient(90deg,rgba(249,115,22,0.07) 0%,transparent 80%);border-radius:0 6px 6px 0;"
+_IS_H3      = "font-size:17px;font-weight:600;color:#374151;margin:30px 0 10px;padding:4px 0 4px 12px;border-left:3px solid #94a3b8;"
+_IS_TABLE   = "width:100%;border-collapse:collapse;margin:22px 0;font-size:14px;"
+_IS_THEAD   = "background:#1f2937;"
+_IS_TH      = "padding:12px 16px;text-align:left;font-weight:600;font-size:13px;color:#f9fafb;border:1px solid #374151;"
+_IS_TD      = "padding:11px 16px;border:1px solid #e5e7eb;color:#374151;vertical-align:top;"
+_IS_BQ      = "margin:20px 0;padding:14px 20px;background:#f0f9ff;border-left:4px solid #0ea5e9;border-radius:0 8px 8px 0;color:#0c4a6e;font-size:15px;line-height:1.75;"
+_IS_PRE     = "background:#0d1117;border:1px solid #30363d;border-radius:10px;padding:32px 22px 20px;margin:18px 0;overflow-x:auto;position:relative;"
+_IS_PRECODE = "font-family:'JetBrains Mono','Fira Code','Consolas',monospace;font-size:13.5px;line-height:1.7;color:#e6edf3;background:none;padding:0;border:none;border-radius:0;"
+_IS_CODE    = "font-family:'JetBrains Mono','Consolas',monospace;font-size:13px;background:#f1f5f9;color:#e11d48;padding:2px 6px;border-radius:4px;border:1px solid #e2e8f0;"
+_IS_SUMMARY = "background:linear-gradient(135deg,#fff7ed 0%,#fffbf7 100%);border:1px solid #fed7aa;border-left:5px solid #f97316;border-radius:0 10px 10px 0;padding:16px 20px;margin:16px 0 28px;font-size:15px;color:#7c2d12;line-height:1.75;"
+_IS_SLABEL  = "display:block;font-weight:700;font-size:11px;letter-spacing:1.2px;color:#f97316;margin-bottom:8px;text-transform:uppercase;"
+_IS_HTAREA  = "margin-top:40px;padding:16px 18px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;font-size:13px;color:#64748b;line-height:2.2;"
+_IS_HTCHIP  = "display:inline-block;background:#fff7ed;border:1px solid #fed7aa;color:#f97316;padding:3px 10px;border-radius:20px;margin:3px 2px;font-size:12px;font-weight:500;"
+_IS_LANLABEL = "position:absolute;top:9px;right:14px;font-size:10px;font-family:Consolas,monospace;color:#6e7681;text-transform:uppercase;letter-spacing:1px;"
 
 
 # ── SQL 문법 하이라이팅 ─────────────────────────────
@@ -348,23 +170,54 @@ def _sql_block_to_div(code_raw):
     )
 
 
+# ── markdown2 HTML에 인라인 스타일 적용 ──────────────
+def _apply_inline_styles(html):
+    """class 기반 CSS 없이도 스타일이 유지되도록 모든 요소에 인라인 스타일 적용"""
+    # h2, h3
+    html = html.replace('<h2>', f'<h2 style="{_IS_H2}">')
+    html = html.replace('<h3>', f'<h3 style="{_IS_H3}">')
+    # table
+    html = html.replace('<table>', f'<table style="{_IS_TABLE}">')
+    html = html.replace('<thead>', f'<thead style="{_IS_THEAD}">')
+    html = html.replace('<th>', f'<th style="{_IS_TH}">')
+    html = html.replace('<td>', f'<td style="{_IS_TD}">')
+    # blockquote
+    html = html.replace('<blockquote>', f'<blockquote style="{_IS_BQ}">')
+    # pre 코드블록 (data-lang 속성 + 인라인 스타일 + 언어 라벨 span 주입)
+    html = re.sub(
+        r'<pre data-lang="([^"]+)"><code[^>]*>',
+        lambda m: (
+            f'<pre data-lang="{m.group(1)}" style="{_IS_PRE}">'
+            f'<span style="{_IS_LANLABEL}">{m.group(1).upper()}</span>'
+            f'<code style="{_IS_PRECODE}">'
+        ),
+        html
+    )
+    # 인라인 code (<code> 태그, style 없는 것만)
+    html = html.replace('<code>', f'<code style="{_IS_CODE}">')
+    return html
+
+
 # ── 마크다운 → 모던 스타일 HTML 변환 ──────────────
 def md_to_styled_html(md_text):
 
-    # 1) 요약: 줄 → summary-box div 변환
+    # 1) 요약: 줄 → 인라인 스타일 summary 박스 변환
     lines = md_text.split('\n')
     processed = []
     for line in lines:
         stripped = line.strip()
         if stripped.startswith('요약:') or stripped.startswith('요약：'):
             content = stripped[3:].strip()
-            processed.append(f'<div class="summary-box">{content}</div>\n')
+            processed.append(
+                f'<div style="{_IS_SUMMARY}">'
+                f'<span style="{_IS_SLABEL}">📌  요약</span>'
+                f'{content}</div>\n'
+            )
         else:
             processed.append(line)
     md_text = '\n'.join(processed)
 
     # 2) SQL 코드블록 선추출 (markdown2가 언어 클래스를 제거하므로 먼저 처리)
-    # markdown2에 넘기기 전에 ```sql...``` 를 <div> placeholder로 교체
     sql_blocks = {}
     sql_counter = [0]
 
@@ -372,7 +225,6 @@ def md_to_styled_html(md_text):
         idx = sql_counter[0]
         sql_counter[0] += 1
         sql_blocks[idx] = m.group(1)
-        # markdown2가 block-level <div>를 그대로 통과시킴
         return f'\n\n<div id="dbai-sqlph-{idx}"></div>\n\n'
 
     md_text = re.sub(
@@ -382,15 +234,15 @@ def md_to_styled_html(md_text):
         flags=re.DOTALL
     )
 
-    # 3) 해시태그 줄 → 태그 칩 박스 변환
+    # 3) 해시태그 줄 → 인라인 스타일 태그 칩 박스 변환
     ht_pattern = r'추천 해시태그[:：]\s*(.+)'
     ht_match = re.search(ht_pattern, md_text)
     hashtag_html = ""
     if ht_match:
         tags = re.findall(r'#[\w가-힣]+', ht_match.group(1))
-        chips = ''.join(f'<span class="ht-chip">{t}</span>' for t in tags)
+        chips = ''.join(f'<span style="{_IS_HTCHIP}">{t}</span>' for t in tags)
         hashtag_html = (
-            f'<div class="hashtag-area">'
+            f'<div style="{_IS_HTAREA}">'
             f'<strong style="color:#374151;display:block;margin-bottom:6px;">🏷️ 태그</strong>'
             f'{chips}</div>'
         )
@@ -413,7 +265,7 @@ def md_to_styled_html(md_text):
         placeholder = f'<div id="dbai-sqlph-{idx}"></div>'
         html_body = html_body.replace(placeholder, _sql_block_to_div(code_raw))
 
-    # 6) 나머지 코드블록 언어 라벨 주입 (non-SQL)
+    # 6) 나머지 코드블록 data-lang 속성 추가
     html_body = re.sub(
         r'<pre><code class="language-([^"]+)">',
         lambda m: f'<pre data-lang="{m.group(1)}"><code class="language-{m.group(1)}">',
@@ -433,10 +285,12 @@ def md_to_styled_html(md_text):
         flags=re.DOTALL
     )
 
-    # 6) 조립
+    # 7) 전체 요소에 인라인 스타일 적용
+    html_body = _apply_inline_styles(html_body)
+
+    # 8) 조립 (외부 wrapper에도 기본 폰트/색상 인라인 적용)
     full_html = (
-        f"{STYLE}\n"
-        f'<div class="dbai-post">\n'
+        f'<div style="{_IS_POST}">\n'
         f'{html_body}\n'
         f'{hashtag_html}\n'
         f'</div>'
@@ -745,28 +599,61 @@ def input_title(driver, title):
     print("[OK] 제목 입력 완료")
 
 
-# ── 본문 HTML 주입 (TinyMCE API) ───────────────────
+# ── 본문 HTML 주입 (TinyMCE contenteditable 모드 대응) ─
 def input_content_html(driver, html_content):
-    print("[7] 본문 HTML 주입 중 (TinyMCE)...")
-    time.sleep(1)
-    # window 변수에 먼저 저장 후 TinyMCE API로 주입
+    print("[7] 본문 HTML 주입 중...")
+    time.sleep(2)  # 에디터 완전 초기화 대기
     driver.execute_script("window.__postHtml = arguments[0];", html_content)
+
     result = driver.execute_script("""
-        if (window.tinymce && tinymce.activeEditor) {
-            tinymce.activeEditor.setContent(window.__postHtml);
-            return 'tinymce';
-        }
-        var iframe = document.querySelector('.tox-edit-area__iframe');
-        if (iframe && iframe.contentDocument) {
+        // ① Tistory TinyMCE iframe 직접 주입 (ID: editor-tistory_ifr)
+        // <style>을 head에, 본문을 body에 분리 주입해야 CSS 클래스가 적용됨
+        var iframe = document.querySelector('#editor-tistory_ifr');
+        if (!iframe) iframe = document.querySelector('.tox-edit-area__iframe');
+        if (iframe && iframe.contentDocument && iframe.contentDocument.body) {
             iframe.contentDocument.body.innerHTML = window.__postHtml;
-            return 'iframe';
+            if (window.tinymce && tinymce.activeEditor) {
+                tinymce.activeEditor.setDirty(true);
+                try { tinymce.activeEditor.nodeChanged(); } catch(e) {}
+            }
+            return 'iframe:' + iframe.id;
         }
-        var el = document.querySelector('[contenteditable="true"]');
-        if (el) { el.innerHTML = window.__postHtml; return 'contenteditable'; }
+        // ② contenteditable 폴백
+        var ceEl = document.querySelector('[contenteditable="true"]');
+        if (ceEl) {
+            ceEl.innerHTML = window.__postHtml;
+            ceEl.dispatchEvent(new Event('input', {bubbles: true}));
+            if (window.tinymce && tinymce.activeEditor) {
+                tinymce.activeEditor.setDirty(true);
+                try { tinymce.activeEditor.nodeChanged(); } catch(e) {}
+            }
+            return 'contenteditable';
+        }
+        // ③ TinyMCE setContent raw 모드
+        if (window.tinymce && tinymce.activeEditor) {
+            try {
+                tinymce.activeEditor.setContent(window.__postHtml, {format: 'raw'});
+                return 'tinymce-raw';
+            } catch(e) {
+                tinymce.activeEditor.setContent(window.__postHtml);
+                return 'tinymce';
+            }
+        }
         return null;
     """)
+
+    # 주입 후 실제 content 길이 검증
     time.sleep(1)
-    print(f"[OK] 본문 주입 완료: {result}")
+    content_len = driver.execute_script("""
+        var iframe = document.querySelector('#editor-tistory_ifr');
+        if (!iframe) iframe = document.querySelector('.tox-edit-area__iframe');
+        if (iframe && iframe.contentDocument && iframe.contentDocument.body)
+            return iframe.contentDocument.body.innerHTML.length;
+        if (window.tinymce && tinymce.activeEditor)
+            return tinymce.activeEditor.getContent().length;
+        return -1;
+    """)
+    print(f"[OK] 본문 주입 완료: {result} (HTML 길이: {content_len}자)")
 
 
 # ── 태그 입력 ───────────────────────────────────────
