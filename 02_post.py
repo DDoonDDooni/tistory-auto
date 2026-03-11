@@ -315,22 +315,34 @@ def _highlight_sql_content(text):
 def _sql_block_to_div(code_raw):
     """SQL 코드를 div 기반 하이라이팅 블록으로 변환.
     <pre><code> 대신 <div>를 사용해 TinyMCE가 span을 텍스트로 이스케이프하는 문제 우회.
+    줄 번호 + white-space:pre 로 들여쓰기 보존.
     """
     highlighted = _highlight_sql_content(code_raw.strip())
     lines = highlighted.split('\n')
-    content = ''.join(
-        f'<span style="display:block;min-height:1.4em">{line if line.strip() else "&nbsp;"}</span>'
-        for line in lines
-    )
+    rows = []
+    for i, line in enumerate(lines, 1):
+        line_num = (
+            f'<span style="display:inline-block;width:2em;text-align:right;'
+            f'color:#484f58;margin-right:1.2em;user-select:none;font-size:11px;'
+            f'border-right:1px solid #30363d;padding-right:0.6em;flex-shrink:0">{i}</span>'
+        )
+        code_part = line if line else ' '
+        rows.append(
+            f'<span style="display:flex;align-items:baseline;min-height:1.6em;'
+            f'white-space:pre">{line_num}'
+            f'<span style="flex:1;white-space:pre">{code_part}</span></span>'
+        )
+    content = ''.join(rows)
     return (
         '<div class="dbai-sql-block" style="'
-        'background:#0d1117;border:1px solid #30363d;border-radius:10px;'
-        'padding:20px 22px 20px 22px;margin:18px 0;overflow-x:auto;'
+        'background:#0d1117;border:1px solid #30363d;border-left:3px solid #388bfd;'
+        'border-radius:0 10px 10px 0;'
+        'padding:16px 18px 16px 14px;margin:18px 0;overflow-x:auto;'
         'font-family:JetBrains Mono,Fira Code,Consolas,monospace;'
-        'font-size:13.5px;line-height:1.7;color:#ffffff;position:relative">'
+        'font-size:13px;line-height:1.7;color:#e6edf3;position:relative">'
         '<span style="position:absolute;top:9px;right:14px;font-size:10px;'
-        'color:#6e7681;text-transform:uppercase;letter-spacing:1px;'
-        'font-family:Consolas,monospace">SQL</span>'
+        'color:#388bfd;text-transform:uppercase;letter-spacing:1.5px;'
+        'font-family:Consolas,monospace;font-weight:600">SQL</span>'
         f'{content}'
         '</div>'
     )
@@ -351,7 +363,26 @@ def md_to_styled_html(md_text):
             processed.append(line)
     md_text = '\n'.join(processed)
 
-    # 2) 해시태그 줄 → 태그 칩 박스 변환
+    # 2) SQL 코드블록 선추출 (markdown2가 언어 클래스를 제거하므로 먼저 처리)
+    # markdown2에 넘기기 전에 ```sql...``` 를 <div> placeholder로 교체
+    sql_blocks = {}
+    sql_counter = [0]
+
+    def _extract_sql_block(m):
+        idx = sql_counter[0]
+        sql_counter[0] += 1
+        sql_blocks[idx] = m.group(1)
+        # markdown2가 block-level <div>를 그대로 통과시킴
+        return f'\n\n<div id="dbai-sqlph-{idx}"></div>\n\n'
+
+    md_text = re.sub(
+        r'```[Ss][Qq][Ll]\n(.*?)```',
+        _extract_sql_block,
+        md_text,
+        flags=re.DOTALL
+    )
+
+    # 3) 해시태그 줄 → 태그 칩 박스 변환
     ht_pattern = r'추천 해시태그[:：]\s*(.+)'
     ht_match = re.search(ht_pattern, md_text)
     hashtag_html = ""
@@ -365,7 +396,7 @@ def md_to_styled_html(md_text):
         )
         md_text = md_text[:ht_match.start()].rstrip()
 
-    # 3) markdown → HTML
+    # 4) markdown → HTML
     html_body = markdown2.markdown(
         md_text,
         extras=[
@@ -377,7 +408,12 @@ def md_to_styled_html(md_text):
         ]
     )
 
-    # 4) 코드블록 언어 라벨 주입
+    # 5) SQL placeholder → 하이라이팅 div로 교체
+    for idx, code_raw in sql_blocks.items():
+        placeholder = f'<div id="dbai-sqlph-{idx}"></div>'
+        html_body = html_body.replace(placeholder, _sql_block_to_div(code_raw))
+
+    # 6) 나머지 코드블록 언어 라벨 주입 (non-SQL)
     html_body = re.sub(
         r'<pre><code class="language-([^"]+)">',
         lambda m: f'<pre data-lang="{m.group(1)}"><code class="language-{m.group(1)}">',
@@ -385,11 +421,9 @@ def md_to_styled_html(md_text):
     )
     html_body = html_body.replace('<pre><code>', '<pre data-lang="code"><code>')
 
-    # 5) SQL 코드블록 → 하이라이팅 div로 교체
-    # (TinyMCE는 <pre><code> 안 <span>을 이스케이프하므로 <div> 기반으로 우회)
+    # (하위 호환) 혹시 남은 SQL pre 블록 처리
     def _sql_block_replace(m):
-        code_escaped = m.group(1)
-        code_raw = _html.unescape(code_escaped)  # &lt; 등 HTML 엔티티 복원
+        code_raw = _html.unescape(m.group(1))
         return _sql_block_to_div(code_raw)
 
     html_body = re.sub(
