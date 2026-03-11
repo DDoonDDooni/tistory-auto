@@ -1,41 +1,25 @@
-# Cursor 명령 프롬프트 모음
+# Claude Code 프롬프트 모음
 
-이 파일의 프롬프트를 Cursor 채팅에 복사해서 사용하세요.
-
----
-
-## [STEP 1] 포스팅 실행 (다음 단계)
-
-```
-PROJECT_STATUS.md와 CLAUDE.md를 먼저 읽고 현재 상태를 파악해줘.
-
-⚠️ 로그인은 이미 완료된 상태야. chrome_profile에 세션이 저장되어 있어.
-로그인 테스트나 로그인 재시도는 하지 마. 포스팅 실행만 해줘.
-
-아래 순서로 진행해줘:
-
-1. posts/post.md 내용 확인 (frontmatter 포함)
-2. 터미널에서 python 02_post.py 실행
-3. 실행 중 오류 발생 시:
-   - error_screenshot.png 확인
-   - CLAUDE.md의 셀렉터 목록 참고
-   - 02_post.py에서 해당 셀렉터 찾아 수정 후 재실행
-   - 로그인 오류가 아닌 경우 로그인 재시도 하지 말 것
-4. 성공 시 PROJECT_STATUS.md의 미완료 항목 체크 업데이트
-```
+Claude Code 채팅에 복사해서 사용하세요.
 
 ---
 
-## [STEP 2] 원고 작성
+## [STEP 1] 포스팅 원고 작성
 
 ```
-PROJECT_STATUS.md와 CLAUDE.md를 먼저 읽어줘.
-
 posts/post.md 파일에 아래 조건으로 포스팅 원고를 작성해줘.
+
+작성 전에 아래 카테고리 중 하나를 선택해줘:
+[DB] Oracle / ExaCC / PostgreSQL / EDB / MySQL / MariaDB / Altibase
+[AWS] Aurora MySQL / Aurora PostgreSQL
+[AI] AI개발 / AI자동화
+
+선택한 카테고리를 제목 맨 앞에 [카테고리] 형식으로 붙여줘.
+예: [Oracle] ORA-1000 예방을 위한 핵심 가이드
 
 주요 키워드: [키워드 입력]
 필수 형태소: [형태소1, 형태소2, 형태소3]
-카테고리: [DB 기술 / AI Agent / 웹 개발 / 일상]
+티스토리 카테고리: [DB 기술 / AI / 웹 개발 / 일상]
 목표 글자 수: 2500자
 추가 내용: [실무 경험, 명령어, 수치 등 선택 입력]
 
@@ -46,11 +30,21 @@ frontmatter 포함해서 작성하고,
 
 ---
 
+## [STEP 2] 포스팅 실행
+
+```
+posts/post.md 내용 확인하고 이상 없으면
+터미널에서 python 02_post.py 실행해줘.
+
+실행 중 오류나면 error_screenshot.png 보고
+CLAUDE.md의 셀렉터 목록 참고해서 바로 수정 후 재실행해줘.
+```
+
+---
+
 ## [STEP 3] 셀렉터 오류 수정
 
 ```
-PROJECT_STATUS.md와 CLAUDE.md를 먼저 읽어줘.
-
 python 02_post.py 실행 중 오류가 발생했어.
 오류 내용: [오류 메시지 붙여넣기]
 
@@ -58,24 +52,19 @@ error_screenshot.png 확인하고
 CLAUDE.md 셀렉터 목록 참고해서
 02_post.py에서 해당 셀렉터 찾아 수정해줘.
 수정 후 바로 재실행해줘.
-수정된 셀렉터는 CLAUDE.md에도 반영해줘.
 ```
 
 ---
 
-## [STEP 4] GitHub Push
+## [STEP 4] Claude 대화 → 포스팅 원고 변환
 
 ```
-PROJECT_STATUS.md와 CLAUDE.md를 먼저 읽어줘.
+아래 대화 내용으로 posts/post.md 포스팅 원고 작성해줘.
 
-D:\DoubleD\tistory_auto 프로젝트를 GitHub 신규 repo로 push해줘.
+[대화 내용 붙여넣기]
 
-순서:
-1. .gitignore 생성 (config.json, chrome_profile/, error_screenshot.png, __pycache__/, *.pyc)
-2. GitHub에 신규 public repo 생성: 이름 tistory-auto
-3. git init → git add . → git status로 config.json 미포함 확인 → commit → push
-
-push 전에 반드시 config.json이 staged에 없는지 검증 후 진행해줘.
+frontmatter 포함, 요약: 박스와 추천 해시태그: 줄 반드시 포함해줘.
+카테고리는 작성 전에 물어봐줘.
 ```
 
 ---
@@ -83,8 +72,6 @@ push 전에 반드시 config.json이 staged에 없는지 검증 후 진행해줘
 ## [STEP 5] 스타일 수정
 
 ```
-PROJECT_STATUS.md와 CLAUDE.md를 먼저 읽어줘.
-
 02_post.py의 STYLE 변수에서 아래 항목을 수정해줘.
 
 변경 내용: [예: 코드블록 배경색을 #1e1e1e로 변경]
@@ -95,27 +82,25 @@ PROJECT_STATUS.md와 CLAUDE.md를 먼저 읽어줘.
 
 ---
 
-## [STEP 6] 진행 상황 업데이트
+## [STEP 6] Git commit & push
 
 ```
-PROJECT_STATUS.md를 현재 상태에 맞게 업데이트해줘.
-
-완료된 항목: [항목 입력]
-새로 발견된 이슈: [이슈 입력]
-다음 단계: [단계 입력]
+현재 변경사항 git commit하고 origin/main으로 push해줘.
 ```
 
 ---
 
-## [STEP 7] Claude 대화 → 포스팅 원고 변환
+## [STEP 7] 전체 현행화
 
 ```
-PROJECT_STATUS.md와 CLAUDE.md를 먼저 읽어줘.
-
-아래 대화 내용으로 posts/post.md 포스팅 원고 작성해줘.
-카테고리: [DB 기술 / AI Agent / 웹 개발 / 일상]
-
-[대화 내용 붙여넣기]
-
-frontmatter 포함, 요약: 박스와 추천 해시태그: 줄 반드시 포함해줘.
+PROJECT_STATUS.md, PROMPTS.md, CLAUDE.md 를 현재 코드 상태에 맞게 전체 현행화해줘.
 ```
+
+---
+
+## 일상 포스팅 루틴
+
+1. Claude Code 채팅에서 STEP 1 프롬프트로 원고 작성 요청
+2. `posts/post.md` 내용 확인
+3. `python 02_post.py` 실행
+4. 티스토리 관리자에서 임시저장 확인 후 발행

@@ -8,6 +8,9 @@ chrome_profile/
 debug_*.png
 error_screenshot.png
 
+# HTML 미리보기
+preview.html
+
 # Python
 __pycache__/
 *.pyc
