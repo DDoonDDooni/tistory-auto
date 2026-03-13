@@ -57,10 +57,10 @@ _IS_POST    = "font-family:'Noto Sans KR','Apple SD Gothic Neo',sans-serif;font-
 _IS_H2      = "font-size:20px;font-weight:700;color:#111827;margin:40px 0 14px;padding:8px 0 8px 16px;border-left:4px solid #f97316;background:linear-gradient(90deg,rgba(249,115,22,0.07) 0%,transparent 80%);border-radius:0 6px 6px 0;"
 _IS_H3      = "font-size:17px;font-weight:600;color:#374151;margin:30px 0 10px;padding:4px 0 4px 12px;border-left:3px solid #94a3b8;"
 _IS_TABLE   = "width:100%;border-collapse:collapse;margin:22px 0;font-size:14px;"
-_IS_THEAD   = "background:#1f2937;"
-_IS_TH      = "padding:12px 16px;text-align:left;font-weight:600;font-size:13px;color:#f9fafb;border:1px solid #374151;"
+_IS_THEAD   = "background:#f3f4f6;"
+_IS_TH      = "padding:12px 16px;text-align:left;font-weight:600;font-size:13px;color:#374151;border:1px solid #e5e7eb;"
 _IS_TD      = "padding:11px 16px;border:1px solid #e5e7eb;color:#374151;vertical-align:top;"
-_IS_BQ      = "margin:20px 0;padding:14px 20px;background:#f0f9ff;border-left:4px solid #0ea5e9;border-radius:0 8px 8px 0;color:#0c4a6e;font-size:15px;line-height:1.75;"
+_IS_BQ      = "margin:20px 0;padding:14px 20px;background:#f0f9ff;border-left:4px solid #0ea5e9;border-radius:0 8px 8px 0;color:#374151;font-size:16px;font-family:inherit;line-height:1.75;word-break:keep-all;text-align:left;"
 _IS_PRE     = "background:#0d1117;border:1px solid #30363d;border-radius:10px;padding:32px 22px 20px;margin:18px 0;overflow-x:auto;position:relative;"
 _IS_PRECODE = "font-family:'JetBrains Mono','Fira Code','Consolas',monospace;font-size:13.5px;line-height:1.7;color:#e6edf3;background:none;padding:0;border:none;border-radius:0;"
 _IS_CODE    = "font-family:'JetBrains Mono','Consolas',monospace;font-size:13px;background:#f1f5f9;color:#e11d48;padding:2px 6px;border-radius:4px;border:1px solid #e2e8f0;"
@@ -181,8 +181,7 @@ def _apply_inline_styles(html):
     html = html.replace('<thead>', f'<thead style="{_IS_THEAD}">')
     html = html.replace('<th>', f'<th style="{_IS_TH}">')
     html = html.replace('<td>', f'<td style="{_IS_TD}">')
-    # blockquote
-    html = html.replace('<blockquote>', f'<blockquote style="{_IS_BQ}">')
+    # blockquote: md_to_styled_html 1단계에서 이미 <div>로 변환됨 → 여기서 처리 불필요
     # pre 코드블록 (data-lang 속성 + 인라인 스타일 + 언어 라벨 span 주입)
     html = re.sub(
         r'<pre data-lang="([^"]+)"><code[^>]*>',
@@ -195,15 +194,22 @@ def _apply_inline_styles(html):
     )
     # 인라인 code (<code> 태그, style 없는 것만)
     html = html.replace('<code>', f'<code style="{_IS_CODE}">')
+    # ORA-NNNNN 에러코드: 하이픈을 non-breaking hyphen(U+2011)으로 교체 → CSS 무관하게 줄바꿈 방지
+    html = re.sub(
+        r'\bORA-(\d+)',
+        'ORA\u2011\\1',
+        html
+    )
     return html
 
 
 # ── 마크다운 → 모던 스타일 HTML 변환 ──────────────
 def md_to_styled_html(md_text):
 
-    # 1) 요약: 줄 → 인라인 스타일 summary 박스 변환
+    # 1) 요약: / blockquote(>) 줄 → 인라인 스타일 div로 선변환 (markdown2 전에 처리해야 TinyMCE 스타일 보존)
     lines = md_text.split('\n')
     processed = []
+    bq_lines = []
     for line in lines:
         stripped = line.strip()
         if stripped.startswith('요약:') or stripped.startswith('요약：'):
@@ -213,8 +219,17 @@ def md_to_styled_html(md_text):
                 f'<span style="{_IS_SLABEL}">📌  요약</span>'
                 f'{content}</div>\n'
             )
+        elif stripped.startswith('> '):
+            bq_lines.append(stripped[2:])
         else:
+            if bq_lines:
+                content = ' '.join(bq_lines)
+                processed.append(f'<div style="{_IS_BQ}">{content}</div>\n')
+                bq_lines = []
             processed.append(line)
+    if bq_lines:
+        content = ' '.join(bq_lines)
+        processed.append(f'<div style="{_IS_BQ}">{content}</div>\n')
     md_text = '\n'.join(processed)
 
     # 2) SQL 코드블록 선추출 (markdown2가 언어 클래스를 제거하므로 먼저 처리)
