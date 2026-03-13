@@ -457,7 +457,7 @@ def kakao_login(driver):
 
     current = driver.current_url
     print(f"  클릭 후 URL: {current}")
-    driver.save_screenshot("debug_kakao_page.png")
+    driver.save_screenshot("debug/debug_kakao_page.png")
 
     # 이미 로그인 완료 (Kakao 세션으로 자동 처리)
     if "tistory.com" in current and "auth/login" not in current and "kakao" not in current:
@@ -737,7 +737,7 @@ def select_category(driver, category):
             print(f"  카테고리 버튼 클릭: {result}")
 
         time.sleep(1.5)
-        driver.save_screenshot("debug_category_open.png")
+        driver.save_screenshot("debug/debug_category_open.png")
 
         # 드롭다운 열린 후 항목 클릭 (li → button → 전체 탐색)
         clicked = driver.execute_script(f"""
@@ -828,7 +828,7 @@ def select_category(driver, category):
 # ── 임시저장 / 발행 ─────────────────────────────────
 def save_post(driver, visibility):
     time.sleep(1)
-    driver.save_screenshot("debug_before_save.png")
+    driver.save_screenshot("debug/debug_before_save.png")
 
     rect = driver.get_window_rect()
     bar_h = _find_chrome_bar_height(driver, rect)
@@ -955,8 +955,8 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\n[오류] {e}")
         try:
-            driver.save_screenshot("error_screenshot.png")
-            print("error_screenshot.png 저장됨")
+            driver.save_screenshot("debug/error_screenshot.png")
+            print("debug/error_screenshot.png 저장됨")
         except Exception:
             pass
         time.sleep(5)

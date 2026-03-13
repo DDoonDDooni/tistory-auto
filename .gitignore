@@ -4,7 +4,10 @@ config.json
 # Chrome 프로필 (로그인 세션 포함)
 chrome_profile/
 
-# 디버그 스크린샷
+# 디버그 스크린샷 폴더
+debug/
+
+# 루트 레벨 디버그 스크린샷 (이전 방식 호환)
 debug_*.png
 error_screenshot.png
 
