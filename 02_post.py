@@ -170,6 +170,36 @@ def _sql_block_to_div(code_raw):
     )
 
 
+def _code_block_to_div(code_raw, lang=''):
+    """일반 코드블록(bash/shell/python 등)을 div 기반 블록으로 변환.
+    <pre> 대신 <div>를 사용해 TinyMCE에서 position:absolute 라벨이 정상 렌더링됨.
+    """
+    escaped = (code_raw.strip()
+               .replace('&', '&amp;')
+               .replace('<', '&lt;')
+               .replace('>', '&gt;'))
+    label_text = lang.upper() if lang else ''
+    label_span = ''
+    if label_text:
+        label_span = (
+            f'<span style="position:absolute;top:9px;right:14px;font-size:10px;'
+            f'color:#3fb950;text-transform:uppercase;letter-spacing:1.5px;'
+            f'font-family:Consolas,monospace;font-weight:600">{label_text}</span>'
+        )
+    pad_top = '14px' if label_text else '0'
+    return (
+        '<div style="background:#0d1117;border:1px solid #30363d;'
+        'border-left:3px solid #3fb950;border-radius:0 10px 10px 0;'
+        'padding:16px 18px;margin:18px 0;overflow-x:auto;position:relative">'
+        f'{label_span}'
+        f'<span style="display:block;font-family:\'JetBrains Mono\',\'Fira Code\','
+        f'Consolas,monospace;font-size:13px;line-height:1.7;color:#e6edf3;'
+        f'white-space:pre;padding-top:{pad_top}">'
+        f'{escaped}</span>'
+        '</div>'
+    )
+
+
 # ── markdown2 HTML에 인라인 스타일 적용 ──────────────
 def _apply_inline_styles(html):
     """class 기반 CSS 없이도 스타일이 유지되도록 모든 요소에 인라인 스타일 적용"""
@@ -249,6 +279,26 @@ def md_to_styled_html(md_text):
         flags=re.DOTALL
     )
 
+    # 2b) 기타 언어 코드블록 선추출 (bash/shell/python 등 → div 기반 렌더링)
+    #     SQL 추출 후 실행하므로 SQL placeholder와 충돌 없음
+    other_blocks = {}
+    other_counter = [0]
+
+    def _extract_other_block(m):
+        lang = (m.group(1) or '').strip().lower()
+        code = m.group(2)
+        idx = other_counter[0]
+        other_counter[0] += 1
+        other_blocks[idx] = (lang, code)
+        return f'\n\n<div id="dbai-codeph-{idx}"></div>\n\n'
+
+    md_text = re.sub(
+        r'```(\w*)\n(.*?)```',
+        _extract_other_block,
+        md_text,
+        flags=re.DOTALL
+    )
+
     # 3) 해시태그 줄 → 인라인 스타일 태그 칩 박스 변환
     ht_pattern = r'추천 해시태그[:：]\s*(.+)'
     ht_match = re.search(ht_pattern, md_text)
@@ -279,6 +329,11 @@ def md_to_styled_html(md_text):
     for idx, code_raw in sql_blocks.items():
         placeholder = f'<div id="dbai-sqlph-{idx}"></div>'
         html_body = html_body.replace(placeholder, _sql_block_to_div(code_raw))
+
+    # 5b) 기타 코드블록 placeholder → div로 교체
+    for idx, (lang, code_raw) in other_blocks.items():
+        placeholder = f'<div id="dbai-codeph-{idx}"></div>'
+        html_body = html_body.replace(placeholder, _code_block_to_div(code_raw, lang))
 
     # 6) 나머지 코드블록 data-lang 속성 추가
     html_body = re.sub(
@@ -318,10 +373,19 @@ def load_post(filepath):
     with open(filepath, "r", encoding="utf-8") as f:
         post = frontmatter.load(f)
 
-    title        = post.get("title", "제목 없음")
-    tags         = post.get("tags", "")
-    category     = post.get("category", DEF_CATEGORY)
-    visibility   = str(post.get("visibility", DEF_VISIBILITY))
+    title      = post.get("title", "제목 없음")
+    tags       = post.get("tags", "")
+    category   = post.get("category", DEF_CATEGORY)
+    visibility = str(post.get("visibility", DEF_VISIBILITY))
+
+    # ORA-NNNNN 에러코드 자동 태그 추가
+    ora_errors = re.findall(r'\bORA-(\d+)', post.content)
+    if ora_errors:
+        existing = set(t.strip() for t in tags.split(',') if t.strip()) if tags else set()
+        new_tags = [f'ORA-{n}' for n in sorted(set(ora_errors)) if f'ORA-{n}' not in existing]
+        if new_tags:
+            tags = (tags + ',' if tags else '') + ','.join(new_tags)
+
     content_html = md_to_styled_html(post.content)
 
     print(f"\n[포스트 정보]")
