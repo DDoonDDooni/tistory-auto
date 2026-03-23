@@ -170,14 +170,110 @@ def _sql_block_to_div(code_raw):
     )
 
 
+def _hl_bash_line(line):
+    """bash 단일 라인 token-based syntax highlighting (겹침 방지 방식)"""
+    spans = []  # (start, end, replacement_html)
+
+    # 1) 인라인 주석 # (라인 끝까지)
+    for m in re.finditer(r'(?:^|(?<=\s))(#[^\n]*)$', line):
+        s, e = m.start(1), m.end(1)
+        esc = m.group(1).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        spans.append((s, e, f'<span style="color:#8b949e;font-style:italic">{esc}</span>'))
+
+    # 2) 이중 인용 문자열 "..."
+    for m in re.finditer(r'"(?:[^"\\]|\\.)*"', line):
+        esc = m.group().replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        spans.append((m.start(), m.end(), f'<span style="color:#a5d6ff">{esc}</span>'))
+
+    # 3) 단일 인용 문자열 '...'
+    for m in re.finditer(r"'[^']*'", line):
+        esc = m.group().replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        spans.append((m.start(), m.end(), f'<span style="color:#a5d6ff">{esc}</span>'))
+
+    # 4) 변수 $VAR ${VAR} $? $!
+    for m in re.finditer(r'\$\{[^}]+\}|\$[a-zA-Z_][a-zA-Z0-9_]*|\$[?!#@*0-9]', line):
+        esc = m.group().replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        spans.append((m.start(), m.end(), f'<span style="color:#e3b341">{esc}</span>'))
+
+    # 5) 쉘 제어 키워드
+    kw_pat = (
+        r'(?<![a-zA-Z_])'
+        r'(if|then|else|elif|fi|for|do|done|while|until|case|esac|in|'
+        r'function|return|break|continue|local|export|source)'
+        r'(?![a-zA-Z_=])'
+    )
+    for m in re.finditer(kw_pat, line):
+        spans.append((m.start(1), m.end(1),
+                      f'<span style="color:#ff7b72;font-weight:bold">{m.group(1)}</span>'))
+
+    # 6) 공통 명령어
+    cmd_pat = (
+        r'(?<![a-zA-Z_/])'
+        r'(echo|printf|cat|grep|awk|sed|ls|cd|mkdir|chmod|chown|cp|mv|rm|ln|find|tar|'
+        r'curl|wget|yum|rpm|systemctl|tuned-adm|sysctl|getenforce|setenforce|'
+        r'initdb|psql|pg_ctl|createrepo|groupadd|useradd|passwd|id|df|mount|'
+        r'vi|vim|tail|head|sort|uniq|wc|touch|tee|xargs|which|whereis|'
+        r'kill|ps|su|sudo|read|eval|exec|nohup|firewall-cmd)'
+        r'(?=\s|;|$|&|\|)'
+    )
+    for m in re.finditer(cmd_pat, line):
+        spans.append((m.start(1), m.end(1),
+                      f'<span style="color:#79c0ff">{m.group(1)}</span>'))
+
+    # 7) 플래그/옵션 (-f, --flag)
+    for m in re.finditer(r'(?<=\s)(--?[a-zA-Z][a-zA-Z0-9\-]*)(?=\s|=|$|;)', line):
+        spans.append((m.start(1), m.end(1),
+                      f'<span style="color:#56d364">{m.group(1)}</span>'))
+
+    # 겹침 제거 (앞쪽 우선)
+    spans.sort(key=lambda x: x[0])
+    non_overlapping = []
+    last_end = 0
+    for s, e, r in spans:
+        if s >= last_end:
+            non_overlapping.append((s, e, r))
+            last_end = e
+
+    # 나머지 텍스트 구간 HTML 이스케이프 후 조합
+    result = ''
+    last = 0
+    for s, e, r in non_overlapping:
+        seg = line[last:s].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        result += seg + r
+        last = e
+    result += line[last:].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    return result
+
+
+def _highlight_bash_content(code):
+    """bash/shell 코드블록 syntax highlighting (라인 단위)"""
+    lines = code.split('\n')
+    result = []
+    for line in lines:
+        stripped = line.lstrip()
+        if stripped.startswith('#'):
+            # 전체 주석 라인
+            esc = line.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+            result.append(f'<span style="color:#8b949e;font-style:italic">{esc}</span>')
+        else:
+            result.append(_hl_bash_line(line))
+    return '<br>'.join(result)
+
+
 def _code_block_to_div(code_raw, lang=''):
     """일반 코드블록(bash/shell/python 등)을 div 기반 블록으로 변환.
     <pre> 대신 <div>를 사용해 TinyMCE에서 position:absolute 라벨이 정상 렌더링됨.
     """
-    escaped = (code_raw.strip()
-               .replace('&', '&amp;')
-               .replace('<', '&lt;')
-               .replace('>', '&gt;'))
+    # bash/sh/shell: syntax highlighting 적용 (이스케이프 포함)
+    if lang.lower() in ('bash', 'sh', 'shell'):
+        content_html = _highlight_bash_content(code_raw.strip())
+    else:
+        escaped = (code_raw.strip()
+                   .replace('&', '&amp;')
+                   .replace('<', '&lt;')
+                   .replace('>', '&gt;'))
+        # \n을 <br>로 변환 — TinyMCE가 text node의 \n을 저장 시 제거하므로 명시적 <br> 사용
+        content_html = escaped.replace('\n', '<br>')
     label_text = lang.upper() if lang else ''
     label_span = ''
     if label_text:
@@ -194,8 +290,8 @@ def _code_block_to_div(code_raw, lang=''):
         f'{label_span}'
         f'<span style="display:block;font-family:\'JetBrains Mono\',\'Fira Code\','
         f'Consolas,monospace;font-size:13px;line-height:1.7;color:#e6edf3;'
-        f'white-space:pre;padding-top:{pad_top}">'
-        f'{escaped}</span>'
+        f'white-space:pre-wrap;padding-top:{pad_top}">'
+        f'{content_html}</span>'
         '</div>'
     )
 
@@ -306,10 +402,15 @@ def md_to_styled_html(md_text):
     if ht_match:
         tags = re.findall(r'#[\w가-힣]+', ht_match.group(1))
         chips = ''.join(f'<span style="{_IS_HTCHIP}">{t}</span>' for t in tags)
+        # 마지막에 "+ 태그 추가" 입력 힌트 칩 삽입 — 클릭 후 텍스트 수정으로 태그 직접 추가 가능
+        add_chip = (
+            f'<span style="{_IS_HTCHIP};border-style:dashed;'
+            f'color:#94a3b8;background:#f8fafc">#태그추가</span>'
+        )
         hashtag_html = (
             f'<div style="{_IS_HTAREA}">'
             f'<strong style="color:#374151;display:block;margin-bottom:6px;">🏷️ 태그</strong>'
-            f'{chips}</div>'
+            f'{chips}{add_chip}</div>'
         )
         md_text = md_text[:ht_match.start()].rstrip()
 
