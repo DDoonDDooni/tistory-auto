@@ -22,6 +22,9 @@ visibility: 0
 """
 
 import os
+import sys
+import platform
+import keyring
 import json
 import time
 import re
@@ -29,6 +32,9 @@ import socket
 import html as _html
 import pyperclip
 import pyautogui
+
+# Mac: command / Windows·Linux: ctrl
+_CMD = "command" if platform.system() == "Darwin" else "ctrl"
 import frontmatter
 import markdown2
 from selenium import webdriver
@@ -44,10 +50,14 @@ with open("config.json", "r", encoding="utf-8") as f:
     config = json.load(f)
 
 KAKAO_EMAIL    = config["kakao_email"]
-KAKAO_PASSWORD = config["kakao_password"]
+KAKAO_PASSWORD = keyring.get_password("tistory-auto", KAKAO_EMAIL)
+if not KAKAO_PASSWORD:
+    raise SystemExit("[오류] 비밀번호가 키체인에 없습니다. setup_credentials.py를 먼저 실행하세요.")
 BLOG_NAME      = config["blog_name"]
 DEF_CATEGORY   = config.get("default_category", "")
 DEF_VISIBILITY = config.get("default_visibility", "0")
+
+os.makedirs("debug", exist_ok=True)
 
 POST_FILE = "posts/post.md"
 REMOTE_DEBUG_PORT = 9222  # Chrome Remote Debugging Port
@@ -530,6 +540,7 @@ def get_driver():
     options.add_argument("--window-size=1280,900")
     # 자동화 감지 플래그 숨기기 (Kakao 안티봇 우회)
     options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_argument("--disable-features=PasswordLeakDetection")       # 비밀번호 유출 팝업 비활성화
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option("useAutomationExtension", False)
     service = Service(ChromeDriverManager().install())
@@ -545,8 +556,9 @@ def get_driver():
         print("[*] 새 Chrome 실행...")
         profile_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "chrome_profile")
         options.add_argument(f"--user-data-dir={profile_dir}")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
+        if platform.system() != "Darwin":  # Mac이 아닐 때만 적용
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
         options.add_argument(f"--remote-debugging-port={REMOTE_DEBUG_PORT}")
         driver = webdriver.Chrome(service=service, options=options)
         driver._keep_alive = False  # 스크립트가 띄운 Chrome → 종료
@@ -629,89 +641,74 @@ def kakao_login(driver):
         print("[OK] 카카오 세션으로 자동 로그인 완료")
         return
 
-    # ──────────────────────────────────────────────────────────
-    # ⚠️  Kakao 도메인에서 execute_script / find_elements 금지
-    #     Kakao 안티봇이 DOM 쿼리 감지 시 Chrome 강제 종료시킴
-    #     URL 분석 + pyautogui 로만 상호작용
-    # ──────────────────────────────────────────────────────────
-
-    # ── Kakao 페이지 단계별 처리 ────────────────────────────
-    # get_window_rect/current_url 은 안전, execute_script/find_elements 금지
-    kakao_page_type = current  # 현재 URL 상태 저장
-
-    # [2단계] 계정 선택 페이지 (simple login / select_account)
-    if "simple" in current or "select_account" in current:
-        print("  [2단계] 카카오 계정 선택 페이지 → 프로필 클릭...")
+    # ── 카카오 로그인 폼 처리 (01_login_test.py와 동일 방식) ──
+    if "kakao" in current:
+        print("  [2단계] 카카오 로그인 폼 → ID/PW 입력 (Selenium)...")
         time.sleep(2)
 
-        rect = driver.get_window_rect()
-        # Kakao 도메인에서는 execute_script 금지 → Tistory에서 측정한 값 사용
-        chrome_bar_h = _chrome_bar_h_measured
-        print(f"  Chrome UI 높이: {chrome_bar_h}px, 창 위치: ({rect['x']}, {rect['y']})")
+        # 이메일 입력
+        email_selectors = [
+            "input[name='loginId']",
+            "input[name='email']",
+            "input[type='email']",
+            "input[autocomplete='username']",
+            "input#loginId",
+        ]
+        email_input = None
+        for sel in email_selectors:
+            try:
+                email_input = WebDriverWait(driver, 5).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, sel))
+                )
+                print(f"  이메일 셀렉터 발견: {sel}")
+                break
+            except Exception:
+                continue
 
-        # 프로필 사진 위치 (viewport 기준): x≈435, y≈307 (1280px 창 레이아웃)
-        # 계정 행 텍스트 (fallback): x≈617, y≈307
-        # 먼저 Chrome 창에 포커스 → 이후 계정 클릭
-        safe_focus_x = rect['x'] + 640
-        safe_focus_y = rect['y'] + chrome_bar_h + 50  # 카드 위 빈 영역
-        pyautogui.click(safe_focus_x, safe_focus_y)
-        time.sleep(0.5)
+        if email_input is None:
+            raise Exception("이메일 입력 필드를 찾을 수 없습니다.")
 
-        for vp_x, vp_y, desc in [
-            (435, 307, "프로필 사진"),
-            (617, 307, "계정 이메일"),
-            (500, 307, "계정 행 중앙"),
-        ]:
-            click_x = rect['x'] + vp_x
-            click_y = rect['y'] + chrome_bar_h + vp_y
-            print(f"  {desc} 클릭: ({click_x}, {click_y})")
-            pyautogui.moveTo(click_x, click_y, duration=0.3)
-            time.sleep(0.2)
-            pyautogui.click()
-            time.sleep(0.5)
-            pyautogui.press("enter")
-            time.sleep(4)
-            current = driver.current_url
-            if "tistory.com" in current and "auth/login" not in current and "kakao" not in current:
-                print(f"[OK] {desc} 클릭 → 로그인 완료")
-                return
-            if "simple" not in current and "select_account" not in current:
-                break  # 다른 Kakao 페이지로 전환됨
-
-        # 계정 선택 후 비밀번호 확인 페이지가 뜬 경우
-        current = driver.current_url
-        if "tistory.com" not in current and ("check" in current or "password" in current):
-            print(f"  비밀번호 확인 페이지 → 비밀번호 입력...")
-            time.sleep(1)
-            pyperclip.copy(KAKAO_PASSWORD)
-            pyautogui.hotkey("ctrl", "v")
-            time.sleep(0.3)
-            pyautogui.press("enter")
-            time.sleep(3)
-            current = driver.current_url
-            if "tistory.com" in current and "auth/login" not in current:
-                print("[OK] 비밀번호 확인 → 로그인 완료")
-                return
-
-        current = driver.current_url
-        print(f"  계정 선택 처리 후 URL: {current[:80]}")
-        print("  → 추가 인증 필요 시 아래 180초 대기 중 처리하세요")
-        # ID/PW 입력은 하지 않음 (계정 선택 페이지에서는 무의미)
-
-    # [3단계] 카카오 로그인 폼 처리 (신규 로그인 / ID·PW 입력)
-    # 계정 선택 화면이 아닌 경우에만 실행
-    elif "kakao" in current:
-        print("  [3단계] 카카오 로그인 폼 → ID/PW 입력 (pyautogui)...")
-        time.sleep(2)
-        pyperclip.copy(KAKAO_EMAIL)
-        pyautogui.hotkey("ctrl", "v")
-        time.sleep(0.5)
-        pyautogui.press("tab")   # 비밀번호 필드로 이동
+        email_input.clear()
+        email_input.send_keys(KAKAO_EMAIL)
         time.sleep(0.3)
-        pyperclip.copy(KAKAO_PASSWORD)
-        pyautogui.hotkey("ctrl", "v")
+
+        # 비밀번호 입력
+        pw_selectors = [
+            "input[name='password']",
+            "input[type='password']",
+            "input#password",
+        ]
+        pw_input = None
+        for sel in pw_selectors:
+            try:
+                pw_input = driver.find_element(By.CSS_SELECTOR, sel)
+                print(f"  비밀번호 셀렉터 발견: {sel}")
+                break
+            except Exception:
+                continue
+
+        if pw_input is None:
+            raise Exception("비밀번호 입력 필드를 찾을 수 없습니다.")
+
+        pw_input.clear()
+        pw_input.send_keys(KAKAO_PASSWORD)
         time.sleep(0.3)
-        pyautogui.press("enter")
+
+        # 로그인 버튼
+        login_btn_selectors = [
+            "button.btn_g.highlight.submit",
+            "button[type='submit']",
+            "button.submit",
+        ]
+        for sel in login_btn_selectors:
+            try:
+                btn = driver.find_element(By.CSS_SELECTOR, sel)
+                btn.click()
+                print(f"  로그인 버튼 클릭: {sel}")
+                break
+            except Exception:
+                continue
+
         time.sleep(2)
         print("[OK] ID/PW 입력 완료")
 
@@ -771,10 +768,10 @@ def input_title(driver, title):
     print(f"  제목 클릭: ({title_x}, {title_y})")
     pyautogui.click(title_x, title_y)
     time.sleep(0.5)
-    pyautogui.hotkey("ctrl", "a")
+    pyautogui.hotkey(_CMD, "a")
     time.sleep(0.2)
     pyperclip.copy(title)
-    pyautogui.hotkey("ctrl", "v")
+    pyautogui.hotkey(_CMD, "v")
     time.sleep(0.5)
     print("[OK] 제목 입력 완료")
 
