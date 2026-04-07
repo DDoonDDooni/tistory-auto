@@ -10,6 +10,7 @@ debug/
 # 루트 레벨 디버그 스크린샷 (이전 방식 호환)
 debug_*.png
 error_screenshot.png
+error_login.png
 
 # HTML 미리보기
 preview.html

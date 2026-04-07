@@ -127,8 +127,8 @@ Chrome 실행 (Selenium + webdriver-manager)
 | 대상 | 방식 | 비고 |
 |------|------|------|
 | 카카오 로그인 버튼 | `a.btn_login.link_kakao_id` | JS click |
-| 카카오 이메일 입력 | `input#loginId` | |
-| 카카오 비밀번호 입력 | `input#password` | |
+| 카카오 이메일 입력 | `input[name='loginId']` | ID는 동적 suffix(loginId--1) 붙으므로 name 속성 사용 |
+| 카카오 비밀번호 입력 | `input[name='password']` | 동일 이유 |
 | 카카오 로그인 제출 | `button.btn_g.highlight.submit` | |
 | 포스트 제목 입력 | pyautogui viewport (300, 185) | wait.until 금지 |
 | 본문 주입 | `#editor-tistory_ifr` iframe body.innerHTML 직접 주입 | |
@@ -138,7 +138,24 @@ Chrome 실행 (Selenium + webdriver-manager)
 | 임시저장 | pyautogui (x≈1047, 하단 -34px) | |
 | 발행(완료) | pyautogui (x≈1163, 하단 -34px) | |
 
-셀렉터가 깨지면 `error_screenshot.png` → `debug_before_save.png` 먼저 확인할 것.
+셀렉터가 깨지면 `debug/error_screenshot.png` → `debug/debug_before_save.png` 먼저 확인할 것.
+
+## 카카오 로그인 주의사항
+
+**URL 분기로 로그인 페이지 판별 금지**
+Kakao OAuth URL에 `prompt=select_account`가 쿼리 파라미터로 항상 포함되어 있어
+`"select_account" in url` 조건이 로그인 폼 페이지에서도 True가 됨 → 오판 발생.
+→ URL 분기 없이 Selenium `input[name='loginId']`으로 바로 입력할 것.
+
+**Chrome 옵션 (Mac/Windows 차이)**
+- `--no-sandbox`, `--disable-dev-shm-usage`: Mac에서 제외 (`platform.system() != "Darwin"` 조건)
+- `--disable-blink-features=AutomationControlled` + `excludeSwitches` + CDP webdriver 재정의: 양쪽 모두 적용
+- `--disable-features=PasswordLeakDetection`: 비밀번호 유출 팝업 비활성화
+
+**비밀번호 관리**
+- `config.json`에 비밀번호 저장 금지 — OS 키체인(`keyring`)으로 관리
+- 최초 1회 또는 변경 시: `python setup_credentials.py`
+- 코드에서 로드: `keyring.get_password("tistory-auto", KAKAO_EMAIL)`
 
 ## 실행 명령어
 
