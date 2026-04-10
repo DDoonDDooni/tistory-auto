@@ -1,372 +1,148 @@
 ---
-title: "[MariaDB] Galera DR - IST vs SST 심층 분석"
-tags: MariaDB,GaleraCluster,IST,SST,DR,Replication,HA,DBA,gcache
-category: DB 기술
+title: "[AI자동화] 맥미니 M1 OpenClaw + 텔레그램 AI 에이전트 구축"
+tags: OpenClaw,맥미니M1,AI에이전트,텔레그램봇,GeminiAPI,ClaudeCode,자동화
+category: AI
 visibility: 0
 ---
-요약: MariaDB Galera Cluster DR 환경을 Storage 복제 방식으로 구성하는 과정에서 IST가 아닌 SST가 지속 발생하는 근본 원인을 심층 분석합니다. gcache preamble의 synced 플래그가 핵심이며, 라이브 복제 환경에서 IST는 설정이 아닌 Galera 설계상의 구조적 한계임을 확인합니다.
+요약: 맥미니 M1에 OpenClaw를 설치하고 Gemini 무료 API와 텔레그램을 연동해 24시간 동작하는 개인 AI 에이전트를 구축했다. Claude Pro 구독을 그대로 활용하면서 추가 비용 없이 나만의 AI 비서를 만드는 전체 과정을 정리한다.
 
-## 1. 이슈 발생
+퇴근길 지하철에서 "오늘 AI 트렌드 정리해줘"라고 텔레그램에 보내면 맥미니가 알아서 정리해서 보내준다면 어떨까. 블로그 글감이 생기면 "발행해줘"라고 메시지 하나 보내면 티스토리에 자동으로 올라간다면? 그 꿈을 현실로 만들어준 도구가 OpenClaw다. 오늘은 맥미니 M1에 OpenClaw를 설치하고 텔레그램과 연동하는 전체 과정을 정리해봤다.
 
-### 상황 설명
+## 내가 만들려는 구조
 
-MariaDB Galera Cluster DR 환경을 Storage 복제 방식으로 구성하는 과정에서 IST가 아닌 SST가 지속적으로 발생하였습니다. 이전 작업에서 SST 발생 원인을 1차 분석한 데 이어, `gcache.recover=no` 적용 및 seqno 수동 설정 후 IST 유도를 재시도하였으나 동일하게 SST가 발생하여 심층 원인 분석을 진행하였습니다.
+본격적인 설치 전에 전체 구조를 먼저 이해하면 훨씬 수월하다.
 
-### 이슈 내용 및 영향도
+텔레그램에서 메시지를 보내면 맥미니에서 24시간 실행 중인 OpenClaw가 메시지를 수신한다. OpenClaw는 Gemini 무료 API를 창구로 활용해 메시지를 처리하고, 실제 작업이 필요한 경우 Claude Code CLI를 subprocess로 호출해서 실행한다. 작업 결과는 다시 텔레그램으로 전달된다.
 
-- `gcache.recover=no` 적용 및 seqno 수동 설정에도 SST 지속 발생
-- SST 소요 시간 약 4분 (mariabackup 방식, 현재 데이터 기준)
-- 데이터 용량 증가 시 SST 시간 비례 증가로 빠른 DR 전환 불가
+```
+텔레그램 → OpenClaw(Gemini 무료, 창구 역할) → Claude Code CLI(실제 작업 처리) → 결과 → 텔레그램
+```
 
----
+이 구조의 핵심은 **비용**이다. Gemini는 무료 API를 사용하고, Claude Code CLI는 기존 Claude Pro 구독으로 동작한다. 추가로 나가는 비용이 없다.
 
-## 2. 분석
+내가 이 구조로 하고 싶은 업무는 크게 세 가지다.
 
-### [이전 작업 요약] 1차 SST 발생 원인 분석
+- 아침마다 AI 트렌드와 이슈를 자동으로 정리해서 텔레그램으로 받기
+- 기술 요약을 텔레그램으로 보내면 Claude Code가 블로그 포스팅 작성 후 티스토리에 자동 발행
+- 날씨나 DBA 기술 문의 같은 일상적인 질의응답
 
-이전 작업에서 파악된 내용을 간략히 정리합니다.
+## 사전 준비
 
-#### SST 발생 원인 1 — grastate.dat seqno -1 상태로 조인
+이 포스팅은 아래 두 가지가 이미 설치된 상태를 기준으로 한다.
 
-- DB 미기동 상태의 `grastate.dat` seqno는 항상 -1
-- -1 상태로 조인 시 Galera가 유효한 위치 정보 없음으로 판단 → SST 발생
-- 해결 시도: `wsrep_recover`로 실제 seqno 확인 후 `{DATADIR}/grastate.dat`에 수동 기입
+**Homebrew**는 맥에서 패키지 관리를 담당하는 필수 도구다. 설치되어 있지 않다면 `brew.sh` 공식 사이트에서 먼저 설치하자.
+
+**iTerm2**는 기본 터미널보다 훨씬 편리한 터미널 앱이다. `iterm2.com`에서 무료로 다운로드할 수 있다.
+
+## Node.js 설치
+
+OpenClaw는 Node.js 기반으로 동작하기 때문에 가장 먼저 설치해야 한다. iTerm2를 열고 아래 명령어를 실행한다.
 
 ```bash
-# wsrep_recover로 실제 seqno 확인
-mysqld --wsrep_recover --user=mysql
-grep "recovered position" {LOGDIR}/error/mysqlerr.log | tail -1
-# 결과: d028e009-4566-11ee-aede-2a16e5fd3617:11779812
+brew install node
 ```
 
-#### SST 발생 원인 2 — gcache preamble full reset
-
-- `gcache.recover` 기본값 `yes`로 인해 gcache 복구 실패 시 전체 초기화 발생
-- gcache 내 writeset 소실 → IST 불가 → SST 발생
-- 해결 시도: `gcache.recover=no` 설정 적용
-
-```
-# 이전 작업에서 확인된 gcache full reset 로그
-GCache::RingBuffer full reset
-GCache history reset: 11246337 -> 0
-GCache history reset: 0 -> 11246360
-```
-
----
-
-### [현재 작업] gcache.recover=no 적용 후 재시도 및 심층 분석
-
-#### ① 설정 적용 및 조건 확인
+설치가 완료되면 정상적으로 설치됐는지 버전을 확인한다.
 
 ```bash
-# my.cnf 설정 변경
-wsrep_provider_options="gcache.recover=no; gcache.size=4G"
+node -v
+npm -v
 ```
+
+두 명령어 모두 버전 번호가 출력되면 정상이다.
+
+## Claude Code CLI 설치
+
+여기서 중요한 포인트가 하나 있다. Cursor IDE에 extension으로 설치된 Claude Code와 CLI 버전은 완전히 별개다. OpenClaw에서 Claude Code를 자동으로 호출하려면 CLI 버전이 반드시 필요하다.
 
 ```bash
-# grastate.dat seqno 수동 기입
-vi {DATADIR}/grastate.dat
-# uuid:  d028e009-4566-11ee-aede-2a16e5fd3617
-# seqno: 11779812
-# safe_to_bootstrap: 0
+npm install -g @anthropic-ai/claude-code
 ```
 
-donor 노드 gcache 보유 범위 확인:
+설치 후 아래 명령어로 정상 동작을 확인한다.
 
 ```bash
-grep -i "gapless" {LOGDIR}/error/mysqlerr.log | tail -5
-# GCache::RingBuffer: found gapless sequence 11690753-11779829
+claude --version
 ```
 
-IST 가능 조건 검증:
+Claude Pro 구독 계정으로 로그인되어 있으면 CLI도 동일한 구독으로 동작한다. 별도 API Key나 추가 비용이 없다.
 
-```
-donor gcache 범위: 11690753 ~ 11779829
-joiner seqno:      11779812
+## OpenClaw 설치
 
-11690753 ≤ 11779812 ≤ 11779829  →  ✅ seqno 범위 조건 충족
-```
-
-> seqno 범위 조건은 충족됐음에도 SST가 발생 → 로그 심층 분석 진행
-
----
-
-#### ② 조인 시점 전체 로그 분석
-
-**단계 1 — 기동 및 wsrep_recover**
-
-```
-15:24:42  Recovered position: d028e009-...:11779812  ← seqno 정상 확인
-15:32:27  Found saved state: d028e009-...:11779812, safe_to_bootstrap: 0
-15:32:27  GCache DEBUG: opened preamble  → 다음 단계로
-```
-
-**단계 2 — gcache preamble 확인 (핵심 원인)**
-
-```
-GCache preamble:
-  UUID:    d028e009-4566-11ee-aede-2a16e5fd3617
-  seqno:   -1 ~ -1   ← ⚠️ 유효하지 않음
-  offset:  -1
-  synced:  0          ← 비정상 종료 상태
-```
-
-**단계 3 — 클러스터 연결 및 IST 준비**
-
-```
-gcomm: connecting to group 'mps_galera'
-connection established to MPS1
-act_id = 11779831 / last_appl = 11779830
-
-IST uuid: d028e009-... f:11779813, l:11779832
-Prepared IST receiver for 11779813-11779832  ← IST 준비까지 완료됨
-```
-
-**단계 4 — SST 결정 (IST 준비 완료에도 SST 선택)**
-
-```
-State transfer needed: yes
-Group state:  d028e009-...:11779832
-Local state:  d028e009-...:11779812
-Selected MPS1 as donor
-Proceeding with SST  ← IST 준비 완료했음에도 SST 결정
-```
-
-**단계 5 — SST 진행 (mariabackup, 약 4분 소요)**
-
-```
-15:32:28  mariabackup SST started on joiner
-15:36:50  State transfer to MPS2 complete
-15:36:51  Preparing the backup
-```
-
-**단계 6 — SST 완료 후 IST 전환**
-
-```
-SST succeeded for position d028e009-...:11779832
-GCache history reset: 0 → d028e009-...:11779832
-####### IST applying starts with 11779833
-Receiving IST... 100.0% (1/1 events) complete  ← IST 1개 수신
-Shifting JOINER → JOINED → SYNCED
-Server MPS2 synced with group  ← 최종 정상 완료
-```
-
----
-
-#### ③ gcache preamble 개념 및 SST 결정 메커니즘 분석
-
-**gcache preamble이란**
-
-`galera.cache` 파일의 헤더 영역으로, Galera가 IST/SST를 결정할 때 가장 먼저 참조하는 메타정보입니다.
-
-```
-galera.cache 파일 구조
-┌─────────────────────────────┐
-│  preamble (헤더)             │
-│  - UUID     : 클러스터 식별자 │
-│  - seqno_min: 최소 writeset  │
-│  - seqno_max: 최대 writeset  │
-│  - synced   : 정상종료 여부  │  ← 0이면 gcache 무효 처리
-├─────────────────────────────┤
-│  ring buffer (실제 데이터)   │
-│  writeset 11690753 ~ ...    │
-└─────────────────────────────┘
-```
-
-**IST/SST 결정 순서**
-
-```
-① preamble synced 확인
-   synced=0  →  gcache 무효 → SST 결정 (이후 단계 무시)
-   synced=1  →  다음 단계로
-
-② preamble seqno_min ~ seqno_max 범위 확인
-   joiner seqno 범위 내  →  IST 시도
-   joiner seqno 범위 밖  →  SST 결정
-```
-
-**DB 종료 상태에 따른 preamble 값**
-
-| DB 종료 상태 | synced | seqno | IST 가능 여부 |
-|---|---|---|---|
-| 정상 종료 | 1 | 유효한 값 | ✅ 가능 |
-| 비정상 종료 | 0 | -1 | ❌ 불가 |
-| 라이브 상태 복제 | 0 | -1 | ❌ 불가 |
-
----
-
-#### ④ 라이브 스토리지 복제 시 preamble이 항상 -1인 이유
-
-```
-DB 프로세스 실행 중
-        ↓
-preamble synced=0, seqno=-1 (실행 중에는 항상 미완성 상태)
-        ↓
-라이브 상태로 스토리지 복제
-        ↓
-복제된 gcache preamble도 동일하게 synced=0, seqno=-1
-        ↓
-gcache.recover=no 설정에도 관계없이 IST 불가
-```
-
-> preamble은 **DB 정상 종료 시점에만** synced=1, seqno 유효값으로 기록됩니다. 라이브 복제는 이 시점을 포착할 수 없습니다.
-
----
-
-#### ⑤ IST 유도를 위한 추가 시도 검토 결과
-
-**preamble 강제 수정 가능 여부**
-- gcache 파일은 바이너리 형식으로 공식적인 수동 수정 방법 없음
-- 강제 수정 시 preamble seqno와 실제 ring buffer 내용 불일치로 데이터 정합성 파괴 위험
-- **시도 불가 결론**
-
-**bootstrap 후 트랜잭션 발생으로 IST 유도 가능 여부**
-
-```
-bootstrap 후 gcache seqno_min: 11779832  (bootstrap 시점)
-joiner seqno:                  11779812
-
-11779812 < 11779832  →  joiner seqno가 gcache 범위 밖
-→  IST 불가
-```
-
-- bootstrap 시점 seqno가 이미 joiner seqno보다 높아 트랜잭션 추가로도 해결 불가
-- **시도 불가 결론**
-
----
-
-#### ⑥ Galera IST가 실제로 동작하는 케이스
-
-| 구성 방법 | IST 가능 여부 | 이유 |
-|---|---|---|
-| 운영 중 노드 일시 중단 후 재조인 | ✅ 가능 | gcache 유효, seqno 연속 |
-| 네트워크 순단 후 재연결 | ✅ 가능 | gcache 범위 내 gap만 수신 |
-| DB 정상 종료 후 재기동 | ✅ 가능 | preamble 정상 기록됨 |
-| 정상 종료 후 스토리지 복제 | ✅ 가능 | preamble 유효 상태로 복제 |
-| **라이브 스토리지 복제 DR 구성** | ❌ 불가 | preamble 항상 synced=0 |
-| **신규 노드 추가** | ❌ 불가 | gcache 자체 없음 |
-
-> **IST는 기존 클러스터 멤버였던 노드가 잠시 이탈 후 재조인하는 경우에 동작하는 메커니즘입니다.** DR 구성처럼 완전히 새로운 환경을 구성하는 경우는 IST 대상이 아닙니다.
-
----
-
-### 분석 결과 종합
-
-| 시도 항목 | 결과 | 비고 |
-|---|---|---|
-| `gcache.recover=no` 적용 | gcache full reset 방지됨 | preamble 문제는 별개 |
-| seqno 수동 설정 | 정상 적용됨 | seqno 범위 조건 충족 |
-| gcache preamble 확인 | synced=0, seqno=-1 | 라이브 복제의 구조적 한계 |
-| IST 준비 | 완료됨 | preamble 무효로 SST 폴백 |
-| preamble 강제 수정 | 불가 | 데이터 정합성 파괴 위험 |
-| 트랜잭션 발생으로 IST 유도 | 불가 | seqno 범위 구조적 불충족 |
-
----
-
-## 3. 결론
-
-### 핵심 발견사항
-
-라이브 스토리지 복제 기반 DR 구성에서 IST는 **설정이나 파라미터 문제가 아닌 Galera 설계상의 구조적 한계**로 불가능합니다.
-
-```
-라이브 복제 → preamble synced=0
-        ↓
-gcache.recover=no  →  full reset 방지 가능
-seqno 수동 설정    →  범위 조건 충족 가능
-preamble synced=0  →  변경 불가, IST 결정 단계에서 SST로 폴백
-        ↓
-SST 불가피
-```
-
-### Storage 복제 DR 구성의 한계
-
-데이터 용량이 커질수록 SST 소요 시간이 비례하여 증가합니다. 빠른 DR 전환(낮은 RTO)이 목표인 환경에서는 현실적인 제약이 존재합니다.
-
-| 데이터 규모 | SST 예상 소요 시간 | DR 전환 가능 여부 |
-|---|---|---|
-| 수십 GB | 수 분 | 가능 |
-| 수백 GB | 수십 분 | 제한적 |
-| TB 이상 | 수 시간 | 사실상 불가 |
-
----
-
-## 4. 권고 구성 방안 — Replication 기반 DR + Galera 재구성
-
-빠른 DR 전환이 목표라면 아래 구성을 권고합니다.
-
-### 구성 개요
-
-```
-운영 환경 (Galera 3 Node)
-  Node 1
-  Node 2  ─── Replication (비동기) ───▶  DR Node 1개
-  Node 3                                  (실시간 동기화)
-  (Source: 사용량 적은 노드 선택)
-                                               │
-                                      DR 전환 시
-                                               ▼
-                                     DR Node 기준으로
-                                     Galera 3 Node 재구성
-```
-
-### 구성 방식 비교
-
-| 항목 | Storage 복제 DR | Replication 기반 DR |
-|---|---|---|
-| DR 전환 시간 | SST 소요 시간 의존 | 거의 즉시 |
-| 데이터 최신성 | 복제 시점 snapshot | 실시간 동기화 |
-| 용량 증가 영향 | SST 시간 비례 증가 | 영향 없음 |
-| 구성 복잡도 | 낮음 | 중간 |
-
-### Replication 구성 절차
-
-```sql
--- 1. 운영 환경에서 가장 사용량이 적은 노드를 Source로 설정
-SHOW MASTER STATUS;
-
--- 2. DR Node에서 Replication 구성
-CHANGE REPLICATION SOURCE TO
-    SOURCE_HOST='[운영 Node IP]',
-    SOURCE_USER='repl_user',
-    SOURCE_PASSWORD='password',
-    SOURCE_AUTO_POSITION=1;
-
-START REPLICA;
-
--- 3. 복제 정상 여부 확인
-SHOW REPLICA STATUS\G
--- Replica_IO_Running: Yes
--- Replica_SQL_Running: Yes
--- Seconds_Behind_Source: 0
-```
-
-### DR 전환 시 절차
+이제 핵심인 OpenClaw를 설치한다.
 
 ```bash
-# 1. DR Node Replication 중단
-STOP REPLICA;
-
-# 2. DR Node를 Galera bootstrap 노드로 기동
-vi {DATADIR}/grastate.dat
-# safe_to_bootstrap: 1
-# wsrep_cluster_address=gcomm://
-
-service galera start
-
-# 3. 추가 노드 2대 Galera 조인 (SST로 동기화)
-# DR Node 기준 최신 데이터로 구성됨
-service galera start
-
-# 4. 클러스터 정상 확인
-mysql -u root -p -e "SHOW GLOBAL STATUS LIKE 'wsrep_cluster_size';"
-mysql -u root -p -e "SHOW GLOBAL STATUS LIKE 'wsrep_local_state_comment';"
+curl -fsSL https://openclaw.ai/install.sh | bash
 ```
 
-### 향후 계획
+설치가 시작되면 보안 경고 화면이 나온다. OpenClaw는 파일 읽기와 명령 실행 권한을 가지기 때문에 반드시 읽어봐야 하는 내용이다. 개인 단독 사용이고 외부에 노출하지 않는 환경이라면 Yes를 선택하고 진행한다.
 
-- Replication 기반 DR Node 구성 검토 및 적용
-- DR 전환 절차 표준화 및 Runbook 작성
-- DR 전환 시간 목표(RTO) 기준으로 구성 방식 최종 결정
+설치 모드는 **Quick Start**를 선택한다. 처음 설치라면 Quick Start로 기본 설정을 잡고 나중에 필요한 부분만 수동으로 수정하는 게 훨씬 효율적이다.
 
-추천 해시태그: #MariaDB #GaleraCluster #IST #SST #DR #gcache #Replication #HA #DBA #데이터베이스
+## 모델 설정 — Gemini 무료 API 연동
+
+모델 선택 단계에서 **Google**을 선택한다. `Gemini CLI OAuth` 항목이 보이는데 이건 선택하지 않는다. 일부 사용자에서 구글 계정 제한이 걸리는 사례가 있어서 API Key 방식이 안전하다.
+
+Google AI Studio(`aistudio.google.com/apikey`)에서 무료 API Key를 발급받아 입력한다. 신용카드 없이 구글 계정만 있으면 바로 발급 가능하다.
+
+모델 선택 단계에서는 `google/gemini-2.5-flash`를 선택한다. 여기서 주의할 점이 있다. 무료 API Key를 사용할 경우 일부 모델에서 봇이 응답하지 않는 현상이 발생할 수 있다. 만약 응답이 없다면 `google/gemini-2.0-flash`로 변경해보자. 모델 변경은 언제든 아래 명령어로 가능하다.
+
+```bash
+openclaw config edit
+```
+
+## 채널 설정 — 텔레그램 연동
+
+채널 선택 단계에서 **Telegram (Bot API)**를 선택한다. 텔레그램 봇 token이 필요한데 아직 없다면 지금 만들면 된다.
+
+텔레그램 앱에서 `@BotFather`를 검색해서 시작한다. `/newbot` 명령어를 입력하고 봇 이름과 username을 설정한다. username은 반드시 `bot`으로 끝나야 한다. 예: `dbai_agent_bot`
+
+설정이 완료되면 아래 형식의 token이 발급된다.
+
+```
+123456789:ABCdefGHIjklMNOpqrsTUVwxyz
+```
+
+이 token을 OpenClaw 설정에 입력한다.
+
+## 웹 검색 설정
+
+웹 검색 제공자 선택 단계에서 **Gemini (Google Search)**를 선택한다. 이미 Gemini API Key를 등록했으니 동일한 키를 입력하면 추가 비용 없이 웹 검색 기능을 사용할 수 있다. 아침 AI 트렌드 자동 정리에 꼭 필요한 기능이다.
+
+## 스킬 및 hook 설정
+
+스킬 설치 단계에서는 `gemini` 스킬만 선택한다. 나머지는 나중에 필요할 때 아래 명령어로 추가할 수 있다.
+
+```bash
+openclaw skills install 스킬명
+```
+
+hook 설정에서는 `session-memory`를 선택한다. 대화 맥락을 기억해주는 기능으로 텔레그램에서 연속 대화할 때 이전 내용을 유지해준다.
+
+실행 모드는 **Hatch in TUI**를 선택해서 터미널에서 바로 동작 확인이 가능하도록 한다.
+
+## 텔레그램 pairing
+
+OpenClaw TUI가 실행된 상태에서 텔레그램 봇에 메시지를 보내면 pairing 코드가 발급된다. iTerm2에서 `Cmd + T`로 새 탭을 열고 아래 명령어를 실행한다. TUI 화면에서 입력하면 봇이 텍스트로 인식해서 명령이 실행되지 않으니 반드시 새 탭에서 실행해야 한다.
+
+```bash
+openclaw pairing approve [페어링코드]
+```
+
+`Approved telegram sender` 라는 메시지가 출력되면 텔레그램 연동이 완료된 것이다.
+
+## 동작 확인
+
+텔레그램 봇에서 메시지를 보내면 OpenClaw가 응답한다. TUI 화면 하단에서 현재 상태를 실시간으로 확인할 수 있다.
+
+```
+connected | idle | google/gemini-2.5-flash | tokens 16k/200k
+```
+
+이 상태가 정상이다. 이제 맥미니가 24시간 AI 에이전트로 동작한다.
+
+## 마무리
+
+오늘은 OpenClaw 설치와 텔레그램 연동까지 완료했다. 현재는 Gemini가 두뇌로 동작하는 상태인데, 다음 포스팅에서는 Claude Code CLI를 실제로 연결해서 블로그 자동 발행과 아침 트렌드 정리 자동화까지 구현해볼 예정이다. 설치하면서 궁금한 점이나 막히는 부분이 있었다면 댓글로 남겨주세요. 함께 해결해봐요!
+
+추천 해시태그: #OpenClaw #맥미니M1 #AI에이전트 #텔레그램봇 #GeminiAPI무료 #ClaudeCode #자동화 #DBA

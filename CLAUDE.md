@@ -130,7 +130,7 @@ Chrome 실행 (Selenium + webdriver-manager)
 | 카카오 이메일 입력 | `input[name='loginId']` | ID는 동적 suffix(loginId--1) 붙으므로 name 속성 사용 |
 | 카카오 비밀번호 입력 | `input[name='password']` | 동일 이유 |
 | 카카오 로그인 제출 | `button.btn_g.highlight.submit` | |
-| 포스트 제목 입력 | pyautogui viewport (300, 185) | wait.until 금지 |
+| 포스트 제목 입력 | JS `textarea[name="title"]` 등 셀렉터로 `.value` 직접 주입 + `getBoundingClientRect()`로 좌표 계산 | Korean IME가 pyautogui hotkey "a"를 "ㅁ"으로 변환하는 문제로 JS 주입 방식으로 전환 |
 | 본문 주입 | `#editor-tistory_ifr` iframe body.innerHTML 직접 주입 | |
 | 태그 입력 | `input#tagText` + JS KeyboardEvent | |
 | 카테고리 버튼 | 텍스트 매칭 `카테고리` | JS click |

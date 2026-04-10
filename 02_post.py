@@ -762,17 +762,88 @@ def input_title(driver, title):
     rect = driver.get_window_rect()
     bar_h = _find_chrome_bar_height(driver, rect)
 
-    # 제목 영역 pyautogui 클릭 (viewport y≈185, 1280px 창 기준)
-    title_x = rect['x'] + 300
-    title_y = rect['y'] + bar_h + 185
-    print(f"  제목 클릭: ({title_x}, {title_y})")
-    pyautogui.click(title_x, title_y)
-    time.sleep(0.5)
-    pyautogui.hotkey(_CMD, "a")
-    time.sleep(0.2)
-    pyperclip.copy(title)
-    pyautogui.hotkey(_CMD, "v")
-    time.sleep(0.5)
+    # JS로 제목 필드 getBoundingClientRect 조회 → 정확한 viewport 좌표 계산
+    title_viewport_y = driver.execute_script("""
+        var selectors = [
+            'textarea[name="title"]',
+            'input[name="title"]',
+            '#title',
+            '[placeholder*="제목"]',
+            'textarea[placeholder]',
+            '.area_title textarea',
+            '.tit_post',
+        ];
+        for (var i = 0; i < selectors.length; i++) {
+            var el = document.querySelector(selectors[i]);
+            if (el) {
+                var r = el.getBoundingClientRect();
+                return Math.round(r.top + r.height / 2);
+            }
+        }
+        return null;
+    """)
+
+    if title_viewport_y is not None:
+        title_x = rect['x'] + 300
+        title_y = rect['y'] + bar_h + title_viewport_y
+        print(f"  제목 JS 좌표: viewport_y={title_viewport_y} → 클릭: ({title_x}, {title_y})")
+    else:
+        # 폴백: 고정 좌표 (viewport y≈130)
+        title_x = rect['x'] + 300
+        title_y = rect['y'] + bar_h + 130
+        print(f"  제목 셀렉터 미발견 → 폴백 클릭: ({title_x}, {title_y})")
+
+    # JS로 제목 필드에 직접 값 주입 (Korean IME 간섭 방지)
+    injected = driver.execute_script("""
+        var selectors = [
+            'textarea[name="title"]',
+            'input[name="title"]',
+            '#title',
+            '[placeholder*="제목"]',
+            'textarea[placeholder]',
+            '.area_title textarea',
+            '.tit_post',
+        ];
+        for (var i = 0; i < selectors.length; i++) {
+            var el = document.querySelector(selectors[i]);
+            if (el) {
+                el.focus();
+                var nv = Object.getOwnPropertyDescriptor(
+                    Object.getPrototypeOf(el), 'value'
+                );
+                if (nv && nv.set) {
+                    nv.set.call(el, arguments[0]);
+                } else {
+                    el.value = arguments[0];
+                }
+                el.dispatchEvent(new Event('input',  {bubbles: true}));
+                el.dispatchEvent(new Event('change', {bubbles: true}));
+                return selectors[i];
+            }
+        }
+        return null;
+    """, title)
+
+    if injected:
+        print(f"  제목 JS 주입 완료: {injected}")
+    else:
+        # 폴백: pyautogui 클릭 후 클립보드 붙여넣기 (IME 상태 초기화 후)
+        print("  제목 JS 실패 → pyautogui 폴백")
+        pyautogui.click(title_x, title_y)
+        time.sleep(0.5)
+        pyautogui.press('escape')   # IME 초기화
+        time.sleep(0.1)
+        pyautogui.keyDown('command')
+        time.sleep(0.05)
+        pyautogui.press('a')
+        pyautogui.keyUp('command')
+        time.sleep(0.2)
+        pyperclip.copy(title)
+        pyautogui.keyDown('command')
+        time.sleep(0.05)
+        pyautogui.press('v')
+        pyautogui.keyUp('command')
+        time.sleep(0.5)
     print("[OK] 제목 입력 완료")
 
 
